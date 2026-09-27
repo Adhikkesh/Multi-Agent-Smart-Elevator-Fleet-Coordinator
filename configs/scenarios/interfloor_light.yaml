@@ -1,0 +1,18 @@
+name: interfloor_light
+description: >
+  Quiet mid-afternoon: sparse floor-to-floor trips that mostly skip the lobby. Cars are
+  genuinely idle most of the time, so this is where parking search earns its keep and
+  where the energy term in the cost function should visibly matter.
+duration: 900
+seed: 45
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+traffic:
+  phases:
+    - {until: 900, rate: 0.06, pattern: interfloor}
+expected:
+  max_avg_wait: 95.0
+  min_delivered: 25

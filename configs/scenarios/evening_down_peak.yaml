@@ -1,0 +1,22 @@
+name: evening_down_peak
+description: >
+  Evening departure. Trips start on the upper floors and end in the lobby. Cars fill up
+  at the top of the building, so the dispatcher cannot improve much by re-ordering — this
+  scenario is the honest counter-example where plain CNP+A* matches or beats the full
+  strategy (see docs/TESTING.md).
+duration: 900
+seed: 43
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+traffic:
+  phases:
+    - {until: 120, rate: 0.08, pattern: light}
+    - {until: 660, rate: 0.20, pattern: down_peak}
+    - {until: 900, rate: 0.08, pattern: down_peak}
+expected:
+  max_avg_wait: 130.0
+  min_delivered: 55
+  detected_pattern_down_peak: 1

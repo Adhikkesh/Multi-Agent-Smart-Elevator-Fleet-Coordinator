@@ -1,0 +1,60 @@
+[project]
+name = "elevator-mas"
+version = "1.0.0"
+description = "Multi-Agent Smart Elevator Fleet Coordinator — a Fundamentals of AI (AIMA 4e) case study"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "mesa>=3.3,<4",
+    "fastapi>=0.115,<0.120",
+    "uvicorn[standard]>=0.32,<0.40",
+    "pydantic>=2.9,<3",
+    "pyyaml>=6.0,<7",
+    "typer>=0.15,<0.20",
+    "pandas>=2.2,<3",
+    "matplotlib>=3.9,<4",
+    "websockets>=13.0,<16",
+    "networkx>=3.3,<4",
+]
+
+[project.scripts]
+elevator = "elevator_mas.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-cov>=6.0,<8",
+    "pytest-asyncio>=0.24,<2",
+    "httpx>=0.27,<0.29",
+    "ruff>=0.8,<0.16",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/elevator_mas"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RET", "ARG", "PTH"]
+ignore = ["B008", "RET504"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = ["slow: long-running tests (deselect with -m 'not slow')"]
+asyncio_mode = "auto"
+filterwarnings = ["error::DeprecationWarning:elevator_mas.*"]
+
+[tool.coverage.run]
+source = ["src/elevator_mas"]
+omit = ["*/web/*", "*/cli.py"]

@@ -1,0 +1,23 @@
+name: car_breakdown
+description: >
+  Car 2 fails at t=120 while carrying riders, and is repaired at t=300. Expected: the car
+  stops, its riders are turned out and re-queued keeping their original arrival time, its
+  hall calls are re-auctioned with raised urgency, the remaining three cars absorb the
+  load, and every passenger is still delivered. Safety rule R4 fires.
+duration: 900
+seed: 46
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+traffic:
+  phases:
+    - {until: 900, rate: 0.16, pattern: up_peak}
+events:
+  - {tick: 120, kind: car_fault, car: 2}
+  - {tick: 300, kind: car_repair, car: 2}
+expected:
+  max_avg_wait: 120.0
+  min_delivered: 55
+  rule_R4_fires: 1

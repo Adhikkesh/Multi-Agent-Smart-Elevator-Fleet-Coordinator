@@ -1,0 +1,22 @@
+name: lunch_two_way
+description: >
+  Lunchtime: heavy traffic out of and back into the lobby at the same time. The hardest
+  regime for a dispatcher, because a car travelling in either direction always has
+  somebody who wants the opposite. Tests that the collective-control legality rule stops
+  riders being carried backwards.
+duration: 900
+seed: 44
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+traffic:
+  phases:
+    - {until: 150, rate: 0.10, pattern: interfloor}
+    - {until: 700, rate: 0.18, pattern: two_way}
+    - {until: 900, rate: 0.10, pattern: interfloor}
+expected:
+  max_avg_wait: 110.0
+  min_delivered: 60
+  detected_pattern_two_way: 1

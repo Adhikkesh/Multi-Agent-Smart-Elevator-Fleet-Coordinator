@@ -1,0 +1,25 @@
+name: stress_scale
+description: >
+  Scalability check: 40 floors, 8 cars, heavy traffic, one simulated hour. Nothing about
+  the code changes — only this file. Used to assert the performance budget (a full
+  simulated hour headless in well under two minutes) and that the plan cache and
+  event-driven replanning actually work.
+duration: 3600
+seed: 49
+strategy: full
+building:
+  floors: 40
+  cars: 8
+  capacity: 12
+traffic:
+  # A 40-floor round trip takes far longer than a 15-floor one, so the sustainable rate
+  # per car is lower. These rates keep the fleet busy (and the search working hard)
+  # without driving it into permanent saturation, where every strategy looks the same.
+  phases:
+    - {until: 900, rate: 0.10, pattern: up_peak}
+    - {until: 1800, rate: 0.12, pattern: two_way}
+    - {until: 2700, rate: 0.12, pattern: down_peak}
+    - {until: 3600, rate: 0.07, pattern: interfloor}
+expected:
+  max_runtime_seconds: 120.0
+  min_delivered: 300

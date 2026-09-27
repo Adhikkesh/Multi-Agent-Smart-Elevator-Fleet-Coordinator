@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Elevator Fleet Coordinator</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>&#127970;</text></svg>">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>Smart Elevator Fleet Coordinator</h1>
+    <span class="sub">Multi-agent simulation &middot; Fundamentals of AI (AIMA 4e)</span>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="live">Live Simulation</button>
+    <button class="tab" data-tab="search">Search Lab</button>
+    <button class="tab" data-tab="bench">Benchmark</button>
+    <button class="tab" data-tab="theory">Theory</button>
+  </nav>
+  <span id="status" class="status-pill paused">connecting…</span>
+</header>
+
+<main>
+
+<!-- ======================================================= LIVE SIMULATION -->
+<section id="tab-live" class="panel-tab active">
+
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-body">
+      <div class="controls">
+        <button id="btn-play" class="primary">Play</button>
+        <button id="btn-step">Step</button>
+        <button id="btn-step10">Step 10</button>
+        <div class="control-group">
+          <label for="in-speed">Speed</label>
+          <input type="range" id="in-speed" min="1" max="50" value="10" step="1">
+          <span id="speed-label" style="font:11px var(--mono);color:var(--text-dim);min-width:26px">10&times;</span>
+        </div>
+        <div class="control-group">
+          <label for="sel-scenario">Scenario</label>
+          <select id="sel-scenario"></select>
+        </div>
+        <div class="control-group">
+          <label for="sel-strategy">Strategy</label>
+          <select id="sel-strategy"></select>
+        </div>
+        <div class="control-group">
+          <label for="in-seed">Seed</label>
+          <input type="number" id="in-seed" value="7" min="0" max="999999">
+        </div>
+        <div class="control-group">
+          <label for="in-floors">Floors</label>
+          <input type="number" id="in-floors" value="15" min="2" max="60">
+        </div>
+        <div class="control-group">
+          <label for="in-cars">Cars</label>
+          <input type="number" id="in-cars" value="4" min="1" max="8">
+        </div>
+        <button id="btn-reset" class="primary">Reset</button>
+        <span style="width:1px;height:22px;background:var(--border)"></span>
+        <div class="control-group">
+          <select id="sel-fault-car" style="padding:5px 8px"></select>
+          <button id="btn-fault" class="danger">Inject fault</button>
+          <button id="btn-repair">Repair</button>
+        </div>
+        <button id="btn-fire" class="danger">Fire alarm</button>
+        <button id="btn-fire-clear">Clear alarm</button>
+        <button id="btn-rush" class="warn">Lobby rush</button>
+        <span id="toast" style="font-size:12px;margin-left:auto"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sim-layout">
+
+    <!-- column 1: the building -->
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>Building</h2>
+          <span class="spacer"></span>
+          <span style="font-size:11px;color:var(--text-faint)">colours = cars &middot; arrows = hall calls</span>
+        </div>
+        <div class="card-body tight">
+          <div id="building-wrap"><canvas id="building"></canvas></div>
+          <div class="canvas-hint">
+            Click a floor to add a passenger (hold <kbd>Shift</kbd> for a priority passenger) &middot;
+            click a car to inspect it. Hall arrows take the colour of the car assigned to that call.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Average wait over time</h2></div>
+        <div class="card-body"><div class="chart-box"><canvas id="awt-chart"></canvas></div></div>
+      </div>
+    </div>
+
+    <!-- column 2: KPIs, auction, traffic -->
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>Live KPIs</h2></div>
+        <div class="card-body"><div id="kpis" class="kpi-grid"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Contract Net auction — last round</h2></div>
+        <div class="card-body" id="auction-body"><div class="empty">waiting…</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Traffic monitor (learning agent)</h2></div>
+        <div class="card-body" id="traffic"><div class="empty">waiting…</div></div>
+      </div>
+    </div>
+
+    <!-- column 3: inspector, messages, rules -->
+    <div>
+      <div class="card">
+        <div class="card-head"><h2>Agent inspector</h2>
+          <span class="spacer"></span>
+          <select id="agent-select" style="padding:4px 7px;font-size:12px"></select>
+        </div>
+        <div class="card-body" id="inspector"><div class="empty">select an agent</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Message log</h2>
+          <span class="spacer"></span>
+          <span style="font:11px var(--mono);color:var(--text-faint)"><span id="message-count">0</span> sent</span>
+          <select id="msg-filter" style="padding:4px 7px;font-size:11px">
+            <option value="">all</option>
+            <option value="REQUEST">REQUEST</option>
+            <option value="CFP">CFP</option>
+            <option value="PROPOSE">PROPOSE</option>
+            <option value="REFUSE">REFUSE</option>
+            <option value="ACCEPT_PROPOSAL">ACCEPT</option>
+            <option value="REJECT_PROPOSAL">REJECT</option>
+            <option value="INFORM">INFORM</option>
+            <option value="CANCEL">CANCEL</option>
+            <option value="FAILURE">FAILURE</option>
+          </select>
+        </div>
+        <div class="card-body tight"><div id="messages" class="log"></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Safety rules fired</h2></div>
+        <div class="card-body tight"><div id="rules" class="log" style="font-family:inherit"></div></div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================ SEARCH LAB -->
+<section id="tab-search" class="panel-tab">
+  <p class="lead">
+    Every algorithm here runs on a problem lifted straight out of the running simulation, so
+    the comparisons are exact rather than illustrative. The uninformed and informed searches
+    share one best-first implementation (<code>planning/search.py</code>), so the node counts
+    are measured by identical bookkeeping.
+  </p>
+
+  <div class="card">
+    <div class="card-head"><h2>State-space search — BFS vs UCS vs Greedy vs A*</h2>
+      <span class="spacer"></span><button id="btn-searchlab">Re-snapshot</button></div>
+    <div class="card-body" id="searchlab-body"><div class="empty">loading…</div></div>
+  </div>
+
+  <div class="grid-2" style="margin-top:14px">
+    <div class="card">
+      <div class="card-head"><h2>Local search — simulated annealing vs hill climbing</h2>
+        <span class="spacer"></span><button id="btn-annealing">Re-run</button></div>
+      <div class="card-body" id="annealing-body"><div class="empty">loading…</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Adversarial search — minimax vs alpha-beta</h2>
+        <span class="spacer"></span><button id="btn-minimax">Re-run</button></div>
+      <div class="card-body" id="minimax-body"><div class="empty">loading…</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================= BENCHMARK -->
+<section id="tab-bench" class="panel-tab">
+  <p class="lead">
+    Four strategies on four traffic regimes, each with several seeds, run headlessly. The same
+    scenarios and the same seeds go to every strategy, so any difference is the coordination
+    mechanism rather than the traffic.
+  </p>
+  <div class="card">
+    <div class="card-head"><h2>Run a benchmark</h2></div>
+    <div class="card-body">
+      <div class="controls">
+        <div class="control-group"><label for="bench-seeds">Seeds</label>
+          <input type="number" id="bench-seeds" value="3" min="1" max="10"></div>
+        <div class="control-group"><label for="bench-ticks">Ticks</label>
+          <input type="number" id="bench-ticks" value="600" min="60" max="3600" step="60"></div>
+        <button id="btn-bench" class="primary">Run benchmark</button>
+        <span style="font-size:11.5px;color:var(--text-faint)">
+          Runs in a worker thread, so the live simulation keeps animating.
+          <code>uv run elevator bench</code> does the same and also writes PNG charts.</span>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <div class="card-body" id="benchmark-body">
+      <div class="empty">No benchmark run yet.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ THEORY -->
+<section id="tab-theory" class="panel-tab">
+  <p class="lead">
+    Everything on this tab is read from the running system — the PEAS tables come from each
+    agent class, the rule table from the live rule base — so the documentation cannot drift
+    away from the implementation.
+  </p>
+
+  <div class="card">
+    <div class="card-head"><h2>System-level PEAS</h2></div>
+    <div class="card-body" id="theory-peas"></div>
+  </div>
+
+  <h3 class="sec">Environment classification</h3>
+  <div class="card"><div class="card-body tight"><div class="table-wrap" id="theory-env"></div></div></div>
+
+  <h3 class="sec">Agents — type and PEAS</h3>
+  <div id="theory-agents"></div>
+
+  <h3 class="sec">Safety rule base (forward chaining, salience order)</h3>
+  <div class="card"><div class="card-body tight"><div class="table-wrap" id="theory-rules"></div></div></div>
+
+  <h3 class="sec">Dispatch strategies</h3>
+  <div class="card"><div class="card-body tight"><div class="table-wrap" id="theory-strategies"></div></div></div>
+
+  <h3 class="sec">Architecture</h3>
+  <div class="card"><div class="card-body">
+    <div class="mermaid-ish">
+   Poisson arrivals (hidden rate)          Scenario YAML (floors, cars, timings, events)
+              │                                          │
+              ▼                                          ▼
+   ┌──────────────────────┐                  ┌────────────────────────┐
+   │  PassengerAgent      │  simple reflex   │      ElevatorModel     │
+   │  (arrive/board/exit) │                  │  staged activation:    │
+   └──────────┬───────────┘                  │  sense→comm→decide→act │
+              │ presses hall button          └────────────┬───────────┘
+              ▼                                           │
+   ┌──────────────────────┐   REQUEST                      │
+   │  FloorAgent × N      ├────────────────┐               │
+   │  model-based reflex  │                │               │
+   │  + aging / fairness  │◄───┐           ▼               ▼
+   └──────────────────────┘    │   ┌────────────────┐  ┌──────────────────┐
+                          INFORM   │ DispatcherAgent│  │  SafetyAgent     │
+                               │   │  auctioneer    │  │  forward chaining│
+   ┌──────────────────────┐    │   │  CNP + SA      │  │  R1…R7           │
+   │  ElevatorAgent × M   │◄───┴───┤  + parking     │◄─┤  overrides all   │
+   │  goal + utility      │  CFP   └───────┬────────┘  └──────────────────┘
+   │  A* stop sequencing  ├────────────────┘                    ▲
+   │  marginal-cost bids  │  PROPOSE / REFUSE                   │ faults, alarms
+   └──────────────────────┘                                     │
+                               ┌──────────────────────┐         │
+                               │ TrafficMonitorAgent  ├─────────┘
+                               │ learning: EWMA rates │  INFORM: weights,
+                               │ + pattern rules      │  parking policy
+                               └──────────────────────┘
+
+   All inter-agent traffic is FIPA-ACL-style Messages on one MessageBus, fully logged.</div>
+  </div></div>
+
+  <h3 class="sec">Contract Net protocol</h3>
+  <div class="card"><div class="card-body">
+    <div class="mermaid-ish">
+   FloorAgent        DispatcherAgent        ElevatorAgent(s)           FloorAgent
+       │                    │                      │                       │
+       │── REQUEST ────────▶│                      │                       │
+       │   (call, urgency)  │                      │                       │
+       │                    │── CFP (broadcast) ──▶│                       │
+       │                    │                      │                       │
+       │                    │                 [each car plans with A*
+       │                    │                  and prices the marginal
+       │                    │                  cost of inserting the call]
+       │                    │                      │                       │
+       │                    │◀── PROPOSE (cost) ───│  available cars       │
+       │                    │◀── REFUSE (reason) ──│  full / OOS / fire    │
+       │                    │                      │                       │
+       │                    │── ACCEPT_PROPOSAL ──▶│  lowest bidder        │
+       │                    │── REJECT_PROPOSAL ──▶│  the others           │
+       │                    │                      │                       │
+       │◀─────────────────────── INFORM (ETA) ─────│  winner lights the    │
+       │                    │                      │  hall lantern         │
+       │                    │                      │                       │
+       │        every 30 s: │ SA re-optimises open assignments             │
+       │                    │── CANCEL ───────────▶│  losing car           │
+       │                    │── ACCEPT_PROPOSAL ──▶│  gaining car          │</div>
+  </div></div>
+</section>
+
+</main>
+
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

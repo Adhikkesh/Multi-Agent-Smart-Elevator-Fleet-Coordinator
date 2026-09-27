@@ -1,0 +1,23 @@
+name: fire_emergency
+description: >
+  Fire alarm at t=150, cleared at t=420. Expected: safety rules R1-R3 fire, every car
+  abandons its calls and runs to the lobby, doors are held open there, hall calls are
+  blocked for the duration, and rule R7 restores normal service after the alarm clears.
+duration: 900
+seed: 47
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+traffic:
+  phases:
+    - {until: 900, rate: 0.14, pattern: two_way}
+events:
+  - {tick: 150, kind: fire_alarm}
+  - {tick: 420, kind: fire_clear}
+expected:
+  rule_R1_fires: 1
+  rule_R3_fires: 1
+  rule_R7_fires: 1
+  all_cars_at_lobby_during_alarm: 1

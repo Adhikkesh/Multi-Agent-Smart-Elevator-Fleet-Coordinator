@@ -1,0 +1,21 @@
+name: priority_passenger
+description: >
+  One in six arrivals is a priority passenger (wheelchair user or VIP) carrying weight x3.
+  Because the routing cost multiplies arrival time by passenger weight, a heavier
+  passenger is served sooner without any special-case code — the utility function alone
+  produces the priority behaviour.
+duration: 900
+seed: 48
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+traffic:
+  priority_probability: 0.17
+  priority_weight: 3.0
+  phases:
+    - {until: 900, rate: 0.15, pattern: two_way}
+expected:
+  max_avg_wait: 110.0
+  priority_served_faster: 1

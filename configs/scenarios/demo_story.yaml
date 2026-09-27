@@ -1,0 +1,31 @@
+name: demo_story
+description: >
+  The five-minute live presentation script: an up-peak rush builds, a lobby surge is
+  injected, car 1 breaks down mid-service and is repaired, then a fire alarm recalls the
+  whole fleet before service is restored. Every algorithm and every safety rule appears
+  in one continuous run. See docs/DEMO_SCRIPT.md for the narration.
+duration: 330
+seed: 7
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+traffic:
+  priority_probability: 0.08
+  priority_weight: 3.0
+  phases:
+    - {until: 60, rate: 0.10, pattern: light}        # 0:00 calm, show the building
+    - {until: 150, rate: 0.24, pattern: up_peak}     # 1:00 the rush, auctions fire
+    - {until: 240, rate: 0.18, pattern: two_way}     # 2:30 breakdown and recovery
+    - {until: 330, rate: 0.12, pattern: down_peak}   # 4:00 fire drill and restore
+events:
+  - {tick: 95,  kind: rush, floor: 0, count: 12}
+  - {tick: 160, kind: car_fault, car: 1}
+  - {tick: 235, kind: car_repair, car: 1}
+  - {tick: 265, kind: fire_alarm}
+  - {tick: 310, kind: fire_clear}
+expected:
+  min_delivered: 20
+  rule_R1_fires: 1
+  rule_R4_fires: 1

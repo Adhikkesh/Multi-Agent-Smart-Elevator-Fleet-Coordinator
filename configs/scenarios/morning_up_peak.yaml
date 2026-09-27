@@ -1,0 +1,23 @@
+name: morning_up_peak
+description: >
+  Morning arrival rush. Almost every trip starts in the lobby and goes up, which is the
+  regime idle-car parking is designed for: the TrafficMonitorAgent should classify this as
+  up_peak within the first minute and tell the dispatcher to park spare cars at the lobby.
+duration: 900
+seed: 42
+strategy: full
+building:
+  floors: 15
+  cars: 4
+  capacity: 10
+  lobby: 0
+traffic:
+  phases:
+    - {until: 120, rate: 0.08, pattern: light}      # early arrivals trickle in
+    - {until: 660, rate: 0.20, pattern: up_peak}    # the rush proper
+    - {until: 900, rate: 0.08, pattern: up_peak}    # tailing off
+expected:
+  # Asserted in tests/test_scenarios.py.
+  max_avg_wait: 90.0
+  min_delivered: 60
+  detected_pattern_up_peak: 1

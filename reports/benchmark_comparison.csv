@@ -1,0 +1,5 @@
+scenario,avg_wait_nearest_car,avg_wait_full,avg_wait_improvement_pct,p95_wait_nearest_car,p95_wait_full,p95_wait_improvement_pct,long_wait_pct_nearest_car,long_wait_pct_full,long_wait_pct_improvement_pct,energy_nearest_car,energy_full,energy_improvement_pct
+morning_up_peak,54.06,15.89,70.6,121.79,49.07,59.7,27.86,2.71,90.3,1177.4,1209.6,-2.7
+evening_down_peak,21.4,22.85,-6.8,68.42,64.57,5.6,8.72,7.68,11.9,1336.2,1342.4,-0.5
+lunch_two_way,17.51,13.25,24.4,60.58,36.76,39.3,6.79,1.68,75.3,1399.2,1309.0,6.4
+interfloor_light,8.52,8.67,-1.8,19.72,22.68,-15.0,0.0,0.26,0.0,790.8,962.2,-21.7
