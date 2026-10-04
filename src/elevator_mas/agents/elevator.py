@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from elevator_mas.agents.base import CommunicatingAgent
-from elevator_mas.comms import Performative
+from elevator_mas.comms import CarStatus, Message, Order, Performative
 from elevator_mas.domain import (
     Bid,
     CarState,
@@ -35,6 +35,12 @@ class ElevatorAgent(CommunicatingAgent):
     crowding and energy — and that same function is what it bids with. Its bid is the
     *marginal* cost of inserting a call into its existing plan, which is what makes the
     Contract Net auction meaningful: each car reports its true opportunity cost.
+
+    **How it interacts.** A car never has its methods called by another agent. It reads
+    its own inbox on its own turn — CFPs from the dispatcher, awards and cancellations,
+    parking advice, safety orders — answers with messages, and publishes its public
+    status (position, direction, load, plan length) on the fleet status board after
+    every change, which is all the rest of the fleet ever sees of it.
 
     PEAS
       - **P** wait and ride time of the people it serves, energy used, never exceeding
@@ -218,6 +224,86 @@ class ElevatorAgent(CommunicatingAgent):
             self.model.collector.total_nodes_expanded += result.nodes_expanded
         self.model.collector.total_replans += 1
 
+    # ------------------------------------------------------------------ bidding
+
+    def compute_bid(self, call: HallCall, urgency: int = 0) -> Bid:
+        """This car's answer to a CFP, under the fleet's configured bidding rule.
+
+        The rule is part of the car's own program, selected by the strategy: the full
+        system bids its true marginal cost (A* with and without the call); the baselines
+        bid a simpler score. Every rule runs *inside the car*, on the car's own state —
+        the dispatcher only ever sees the number that comes back in the PROPOSE.
+        """
+        rule = self.model.strategy.assignment
+        if rule == "nearest":
+            return self.nearest_car_bid(call)
+        if rule == "look":
+            return self.collective_bid(call)
+        return self.marginal_cost(call, urgency)
+
+    def _refusal(self) -> Bid | None:
+        """A REFUSE bid if this car cannot take new work, else None."""
+        if not self.available:
+            reason = "out of service" if self.out_of_service else "fire mode"
+            return Bid(car_id=self.car_id, total=float("inf"), refused=True, reason=reason)
+        if self.space <= 0:
+            return Bid(car_id=self.car_id, total=float("inf"), refused=True, reason="full")
+        return None
+
+    def nearest_car_bid(self, call: HallCall) -> Bid:
+        """Nearest-car reflex score: distance only, with idle cars preferred.
+
+        The classic baseline. It ignores what the car is already committed to, which is
+        exactly its weakness: a car three floors away with eight stops still queued beats
+        an empty car five floors away.
+        """
+        refusal = self._refusal()
+        if refusal is not None:
+            return refusal
+        distance = abs(self.floor - call.floor)
+        busy_penalty = 0.0 if not self.assigned_calls and not self.riders else 8.0
+        total = float(distance) + busy_penalty
+        bid = Bid(
+            car_id=self.car_id,
+            total=total,
+            wait=float(distance),
+            crowding=busy_penalty,
+            eta=distance * float(self.timing.seconds_per_floor),
+        )
+        self.last_bid = bid
+        return bid
+
+    def collective_bid(self, call: HallCall) -> Bid:
+        """Collective/LOOK score: strongly prefer a car already sweeping towards the call.
+
+        This is how conventional lift control behaves — a call is picked up by a car that
+        is coming that way anyway — and it is a much better baseline than nearest-car
+        because it avoids sending cars backwards.
+        """
+        refusal = self._refusal()
+        if refusal is not None:
+            return refusal
+        distance = abs(self.floor - call.floor)
+        seconds_per_floor = float(self.timing.seconds_per_floor)
+        approaching = self.direction is Direction.IDLE or (
+            self.direction is call.direction
+            and (call.floor - self.floor) * self.direction.sign >= 0
+        )
+        # A car that must finish its sweep and come back pays for the whole detour.
+        detour = 0.0 if approaching else 2.0 * self.model.config.building.floors
+        queue_penalty = 2.0 * (len(self.assigned_calls) + len(self.car_calls))
+        total = distance * seconds_per_floor + detour + queue_penalty
+        bid = Bid(
+            car_id=self.car_id,
+            total=total,
+            wait=distance * seconds_per_floor,
+            ride=detour,
+            crowding=queue_penalty,
+            eta=(distance + detour / seconds_per_floor) * seconds_per_floor,
+        )
+        self.last_bid = bid
+        return bid
+
     def marginal_cost(self, call: HallCall, urgency: int = 0) -> Bid:
         """Bid = the *extra* utility cost of inserting `call` into the current plan.
 
@@ -230,12 +316,10 @@ class ElevatorAgent(CommunicatingAgent):
         won, and they are weighted by W1-W4, which the TrafficMonitorAgent retunes as the
         traffic pattern changes.
         """
-        weights = self.model.weights
-        if not self.available:
-            reason = "out of service" if self.out_of_service else "fire mode"
-            return Bid(car_id=self.car_id, total=float("inf"), refused=True, reason=reason)
-        if self.space <= 0:
-            return Bid(car_id=self.car_id, total=float("inf"), refused=True, reason="full")
+        weights = self.model.board.weights
+        refusal = self._refusal()
+        if refusal is not None:
+            return refusal
 
         costs = self.routing_costs
         current_stops = self.pending_stops()
@@ -352,39 +436,141 @@ class ElevatorAgent(CommunicatingAgent):
     # ------------------------------------------------------------ communication
 
     def sense(self) -> None:
-        """Read the inbox and drop goals that reality has already satisfied."""
-        self.collect_mail()
+        """Start a fresh tick's mailbox, read it, and drop goals already satisfied."""
+        self.inbox = []
+        self.read_mail()
         self.prune_stale_calls()
+        self.publish_status()
 
-    def communicate(self) -> None:
-        """Answer every call for proposals, and honour awards and cancellations."""
-        for message in self.inbox:
-            performative = message.performative
-            content = message.content
-            if performative is Performative.CFP:
-                # The dispatcher polls each car within its own auction round and posts
-                # that car's PROPOSE/REFUSE on its behalf, so the reply already exists by
-                # the time the broadcast CFP is drained here. Answering it again would put
-                # two proposals per car into the log and double the messages-per-call
-                # metric, so this branch deliberately does nothing.
-                continue
-            if performative is Performative.ACCEPT_PROPOSAL:
-                call = content["call"]
-                self.accept_call(call)
-                self.send(
-                    Performative.INFORM,
-                    f"floor-{call.floor}",
-                    message.conversation_id,
-                    {
-                        "car_id": self.car_id,
-                        "direction": call.direction,
-                        "eta": self.eta_to(call.floor),
-                    },
-                )
-            elif performative is Performative.CANCEL:
-                call = content.get("call")
-                if isinstance(call, HallCall):
-                    self.drop_call(call)
+    def bid(self) -> None:
+        """Negotiation sub-stage: answer the CFP in this car's inbox with PROPOSE/REFUSE."""
+        self.read_mail()
+
+    def commit(self) -> None:
+        """Negotiation sub-stage: honour an ACCEPT_PROPOSAL (or note a REJECT)."""
+        self.read_mail()
+
+    def read_mail(self) -> None:
+        """Handle everything that has arrived since the last read, in arrival order.
+
+        This is the car's only doorway to the rest of the fleet. Whatever stage it is
+        called from, the car does the same thing: read, act on each message in turn, then
+        publish its (possibly changed) status for everyone else to see.
+        """
+        for message in self.receive():
+            self._handle(message)
+        self.publish_status()
+
+    def _handle(self, message: Message) -> None:
+        """React to one message. Unknown kinds are ignored, as FIPA agents do."""
+        performative = message.performative
+        content = message.content
+        if performative is Performative.CFP:
+            self._answer_cfp(message)
+        elif performative is Performative.ACCEPT_PROPOSAL:
+            self._honour_award(message)
+        elif performative is Performative.CANCEL:
+            call = content.get("call")
+            if isinstance(call, HallCall):
+                self.drop_call(call)
+        elif performative is Performative.INFORM and "park_at" in content:
+            self.park_target = content["park_at"]
+        elif performative is Performative.REQUEST and isinstance(content.get("order"), Order):
+            self._obey(content["order"], message)
+
+    def _answer_cfp(self, cfp: Message) -> None:
+        """Compute this car's own bid for the announced call and reply to the auctioneer."""
+        call = cfp.content["call"]
+        bid = self.compute_bid(call, int(cfp.content.get("urgency", 0)))
+        content: dict[str, Any] = {"call": call, "car_id": self.car_id}
+        if bid.refused:
+            content["reason"] = bid.reason
+            performative = Performative.REFUSE
+        else:
+            content["bid"] = bid
+            performative = Performative.PROPOSE
+        self.send(performative, cfp.sender, cfp.conversation_id, content)
+
+    def _honour_award(self, award: Message) -> None:
+        """Take on a call this car has won, and light the landing's hall lantern.
+
+        If the car has become unavailable since it bid (a fault or a fire recall arrived
+        in the same tick), it hands the call straight back with a FAILURE rather than
+        silently holding work it cannot do.
+        """
+        call = award.content["call"]
+        if not self.available:
+            self.send(
+                Performative.FAILURE,
+                award.sender,
+                award.conversation_id,
+                {
+                    "car_id": self.car_id,
+                    "released": [call],
+                    "reason": "out of service" if self.out_of_service else "fire mode",
+                },
+            )
+            return
+        self.accept_call(call)
+        self.send(
+            Performative.INFORM,
+            f"floor-{call.floor}",
+            award.conversation_id,
+            {"car_id": self.car_id, "direction": call.direction, "eta": self.eta_to(call.floor)},
+        )
+
+    def _obey(self, order: Order, request: Message) -> None:
+        """Carry out a safety order. Safety asks; the car does the work itself."""
+        if order is Order.FIRE_RECALL:
+            self.enter_fire_mode(int(request.content.get("lobby", self.model.lobby)))
+        elif order is Order.HOLD_DOORS_OPEN:
+            self.hold_doors_open()
+        elif order is Order.REFUSE_BOARDING:
+            self.refuse_boarding()
+        elif order is Order.REOPEN_DOORS:
+            self.reopen_doors()
+        elif order is Order.OUT_OF_SERVICE:
+            if self.out_of_service:
+                return
+            released = self.go_out_of_service()
+            self.send(
+                Performative.FAILURE,
+                "dispatcher",
+                request.conversation_id,
+                {"car_id": self.car_id, "released": released, "reason": "mechanical fault"},
+            )
+        elif order is Order.RETURN_TO_SERVICE:
+            self.return_to_service()
+        elif order is Order.RESTORE_SERVICE and self.fire_mode:
+            self.restore_normal_service()
+
+    def publish_status(self) -> None:
+        """Post this car's public status on the fleet status board."""
+        end = self.planned_stops[-1].floor if self.planned_stops else None
+        self.model.board.publish_car(
+            CarStatus(
+                car_id=self.car_id,
+                address=self.address,
+                tick=self.model.tick,
+                floor=self.floor,
+                direction=self.direction,
+                load=self.load,
+                capacity=self.capacity,
+                space=self.space,
+                available=self.available,
+                out_of_service=self.out_of_service,
+                fire_mode=self.fire_mode,
+                door=self.door_state.value,
+                door_blocked_ticks=self.door_blocked_ticks,
+                assigned_calls=frozenset(self.assigned_calls),
+                car_calls=frozenset(self.car_calls),
+                riders=len(self.riders),
+                plan_end_floor=end,
+                plan_end_eta=float(self.eta_to(end)) if end is not None else 0.0,
+                planned_stops=len(self.planned_stops),
+                park_target=self.park_target,
+            )
+        )
 
     def accept_call(self, call: HallCall) -> None:
         """Take responsibility for a hall call and replan."""
@@ -401,6 +587,15 @@ class ElevatorAgent(CommunicatingAgent):
     # --------------------------------------------------------------- decide/act
 
     def decide(self) -> None:
+        """Read late mail (reassignments, parking advice, safety orders), then choose.
+
+        The next target comes from the plan, or a parking floor when the car is idle.
+        """
+        self.read_mail()
+        self._choose_target()
+        self.publish_status()
+
+    def _choose_target(self) -> None:
         """Choose the next target floor from the plan, or a parking floor when idle."""
         if self.out_of_service:
             self.state = CarState.OUT_OF_SERVICE
@@ -430,7 +625,12 @@ class ElevatorAgent(CommunicatingAgent):
             self.direction = Direction.IDLE
 
     def act(self) -> None:
-        """Advance the physics by one tick: doors, then motion, then boarding.
+        """Advance the physics by one tick, then publish the resulting status."""
+        self._advance_physics()
+        self.publish_status()
+
+    def _advance_physics(self) -> None:
+        """Doors, then motion, then boarding.
 
         The ordering here is what enforces the safety invariant the tests assert: a car
         only ever moves in the `CLOSED` branch, so the doors can never be open while it
@@ -553,6 +753,7 @@ class ElevatorAgent(CommunicatingAgent):
         if self.fire_mode or self.out_of_service or self.boarding_refused:
             return 0
         boarded = 0
+        picked_up: set[HallCall] = set()
         directions = self._serving_directions()
         for passenger in self.model.waiting_at(self.floor):
             if self.space <= 0:
@@ -562,12 +763,24 @@ class ElevatorAgent(CommunicatingAgent):
             passenger.board(self.car_id, self.model.tick)
             self.riders.append(passenger)
             self.car_calls.add(passenger.destination)  # the car button
+            picked_up.add(HallCall(passenger.origin, passenger.direction))
             self.model.on_board(passenger, self.car_id)
             boarded += 1
         if boarded:
             self.needs_replan = True
             for direction in directions:
                 self.assigned_calls.discard(HallCall(self.floor, direction))
+            # Tell the dispatcher which calls now have people aboard, so it stops
+            # treating them as open work that could be moved to another car.
+            self.send(
+                Performative.INFORM,
+                "dispatcher",
+                self.model.new_conversation_id(),
+                {
+                    "car_id": self.car_id,
+                    "picked_up": sorted(picked_up, key=lambda c: (c.floor, c.direction.value)),
+                },
+            )
         return boarded * self.timing.boarding_per_passenger
 
     def _serving_directions(self) -> set[Direction]:

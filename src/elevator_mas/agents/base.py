@@ -17,10 +17,16 @@ class CommunicatingAgent(Agent):
     """An agent with a bus address and an inbox.
 
     Subclasses implement the staged-activation hooks they need — `sense`, `communicate`,
-    `decide`, `act` — which the model calls in that fixed order every tick via
-    `model.agents_by_type[Cls].do(stage)`. The stages exist so that within one tick every
-    agent senses the *same* world state before anyone acts on it; without that, results
-    would depend on activation order rather than on the agents' reasoning.
+    `decide`, `act`, `learn` — which the model calls in that fixed order every tick via
+    `model.agents_by_type[Cls].do(stage)`. Between `communicate` and `decide` the model
+    runs the Contract Net negotiation, whose own sub-stages (`announce`, `bid`, `award`,
+    `commit`) are hooks on the dispatcher and the cars. The stages exist so that within
+    one tick every agent senses the *same* world state before anyone acts on it; without
+    that, results would depend on activation order rather than on the agents' reasoning.
+
+    **The one rule of interaction:** an agent never calls another agent's methods. It
+    influences others only by sending messages (read from their own inbox, on their own
+    turn) and it learns about them only from messages and the public status board.
     """
 
     #: The AIMA agent type, shown in the dashboard's agent inspector.
@@ -57,9 +63,20 @@ class CommunicatingAgent(Agent):
         return message
 
     def collect_mail(self) -> list[Message]:
-        """Move everything addressed to this agent into `self.inbox`."""
+        """Move everything addressed to this agent into `self.inbox` (replacing it)."""
         self.inbox = self.bus.drain(self.address)
         return self.inbox
+
+    def receive(self) -> list[Message]:
+        """Take the mail that has arrived since the last read, and return it.
+
+        Unlike `collect_mail`, this appends to `self.inbox` rather than replacing it, so
+        an agent that reads its mail several times in one tick (a car answering a CFP,
+        then an award) keeps the whole tick's correspondence for the inspector.
+        """
+        new = self.bus.drain(self.address)
+        self.inbox.extend(new)
+        return new
 
     def mail_of(self, *performatives: Performative) -> list[Message]:
         """The messages in the current inbox with any of these performatives."""
@@ -79,6 +96,9 @@ class CommunicatingAgent(Agent):
 
     def act(self) -> None:
         """Stage 4: apply the chosen action to the environment."""
+
+    def learn(self) -> None:
+        """Stage 5: update learned knowledge from this tick's outcome (default: nothing)."""
 
     def describe(self) -> dict[str, Any]:
         """What the dashboard's agent inspector shows for this agent."""

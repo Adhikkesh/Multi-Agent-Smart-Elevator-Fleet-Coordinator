@@ -34,9 +34,9 @@ from elevator_mas.agents import (
     SafetyAgent,
     TrafficMonitorAgent,
 )
-from elevator_mas.comms import MessageBus, Performative
-from elevator_mas.config import ScenarioConfig
-from elevator_mas.domain import CarState, Direction, HallCall
+from elevator_mas.comms import MessageBus, StatusBoard
+from elevator_mas.config import CostWeights, ScenarioConfig
+from elevator_mas.domain import CarState, Direction
 from elevator_mas.metrics import Metrics, MetricsCollector
 from elevator_mas.strategies import DispatchStrategy, get_strategy
 from elevator_mas.traffic import ArrivalGenerator
@@ -44,7 +44,18 @@ from elevator_mas.traffic import ArrivalGenerator
 #: The fixed order of the tick. Every agent of one type completes a stage before the next
 #: stage begins, so within a tick nobody acts on a world another agent has already
 #: changed — which is what makes the run deterministic given the seed.
-STAGES: tuple[str, ...] = ("sense", "communicate", "decide", "act")
+#:
+#: ``negotiate`` is the Contract Net, expanded into its own sub-stages for each queued
+#: call: the dispatcher *announces* (CFP), every car *bids* from its own inbox
+#: (PROPOSE/REFUSE), the dispatcher *awards* (ACCEPT/REJECT), and every car *commits*
+#: (the winner takes the call and INFORMs the landing). In the course's vocabulary:
+#: sense → reason (communicate + negotiate) → decide → act → learn.
+STAGES: tuple[str, ...] = ("sense", "communicate", "negotiate", "decide", "act", "learn")
+
+#: Within a stage, agent types run in this order. Safety leads so that its orders bind
+#: everyone later in the same stage; cars run last so they read every message addressed
+#: to them in that stage.
+AGENT_ORDER = (SafetyAgent, TrafficMonitorAgent, FloorAgent, DispatcherAgent, ElevatorAgent)
 
 
 class ElevatorModel(Model):
@@ -57,13 +68,15 @@ class ElevatorModel(Model):
         self.config = config
         self.seed_value = seed if seed is not None else config.seed
         self.strategy: DispatchStrategy = get_strategy(config.strategy)
-        self.weights = config.weights
 
         self.tick: int = 0
         self.lobby = config.building.lobby
         self.floors_count = config.building.floors
 
         self.bus = MessageBus()
+        #: The public blackboard: cars publish their status, the monitor its policy.
+        self.board = StatusBoard(config.weights)
+        self.negotiation_rounds: int = 0
         self.collector = MetricsCollector(long_wait_threshold=config.fairness.long_wait_threshold)
         self.generator = ArrivalGenerator(config, self.random)
 
@@ -86,6 +99,8 @@ class ElevatorModel(Model):
         self.safety = SafetyAgent(self)
 
         self.passengers: list[PassengerAgent] = []
+        for car in self.cars:
+            car.publish_status()
 
         self.datacollector = DataCollector(
             model_reporters={
@@ -110,6 +125,15 @@ class ElevatorModel(Model):
         )
 
     # ------------------------------------------------------------------- helpers
+
+    @property
+    def weights(self) -> CostWeights:
+        """The cost weights the fleet currently bids with, as published on the board."""
+        return self.board.weights
+
+    @weights.setter
+    def weights(self, value: CostWeights) -> None:
+        self.board.publish_policy("model", self.tick, weights=value)
 
     def new_conversation_id(self) -> str:
         """A fresh conversation id, threading one protocol round together."""
@@ -148,10 +172,8 @@ class ElevatorModel(Model):
     # ------------------------------------------------------------ event callbacks
 
     def on_board(self, passenger: PassengerAgent, car_id: int) -> None:
-        """A passenger boarded: the dispatcher may stop reassigning that call."""
-        call = HallCall(passenger.origin, passenger.direction)
-        self.dispatcher.picked_up.add(call)
-        del car_id
+        """A passenger boarded (the car itself tells the dispatcher, by INFORM)."""
+        del passenger, car_id
 
     def on_alight(self, passenger: PassengerAgent) -> None:
         """A passenger was delivered."""
@@ -198,15 +220,10 @@ class ElevatorModel(Model):
         detail: dict[str, Any] = {"tick": self.tick, "kind": kind}
         if kind == "car_fault":
             car_id = car if car is not None else self.random.randrange(len(self.cars))
-            target = self.car(car_id)
-            if target is not None:
+            if self.car(car_id) is not None:
+                # The fault line: a hardware signal into the safety supervisor, whose
+                # rule R4 then orders the car out of service.
                 self.safety.report_fault(car_id)
-                target.send(
-                    Performative.FAILURE,
-                    "dispatcher",
-                    self.new_conversation_id(),
-                    {"car_id": car_id, "reason": "mechanical fault", "released": []},
-                )
             detail["car"] = car_id
         elif kind == "car_repair":
             car_id = car if car is not None else 0
@@ -248,11 +265,11 @@ class ElevatorModel(Model):
 
         # Stage order is fixed; the safety agent leads so its conclusions bind everyone.
         for stage in STAGES:
-            self.agents_by_type[SafetyAgent].do(stage)
-            self.agents_by_type[TrafficMonitorAgent].do(stage)
-            self.agents_by_type[FloorAgent].do(stage)
-            self.agents_by_type[DispatcherAgent].do(stage)
-            self.agents_by_type[ElevatorAgent].do(stage)
+            if stage == "negotiate":
+                self._negotiate()
+                continue
+            for agent_type in AGENT_ORDER:
+                self.agents_by_type[agent_type].do(stage)
 
         self._retire_delivered()
 
@@ -262,6 +279,28 @@ class ElevatorModel(Model):
         self.collector.compute_ms += self.compute_ms_last_tick
         self.latest_metrics = self.collector.snapshot(self.tick)
         self.datacollector.collect(self)
+
+    def _negotiate(self) -> None:
+        """Run one Contract Net round per queued call, entirely by message.
+
+        The model only schedules the turns — announce, bid, award, commit — exactly as
+        Mesa's staged activation schedules any other stage. Every piece of information
+        that passes between the dispatcher and the cars travels as a message on the
+        bus, read by its recipient on its own turn. Rounds run one call at a time, so
+        each car bids knowing every award already made this tick.
+        """
+        dispatchers = self.agents_by_type[DispatcherAgent]
+        cars = self.agents_by_type[ElevatorAgent]
+        rounds = 0
+        while True:
+            dispatchers.do("announce")
+            if not self.dispatcher.round_open:
+                break
+            cars.do("bid")
+            dispatchers.do("award")
+            cars.do("commit")
+            rounds += 1
+        self.negotiation_rounds = rounds
 
     def _retire_delivered(self) -> None:
         """Remove delivered passengers from the population.

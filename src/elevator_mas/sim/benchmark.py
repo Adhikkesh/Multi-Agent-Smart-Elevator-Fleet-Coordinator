@@ -113,7 +113,7 @@ def run_benchmark(
     scenarios: list[str] | tuple[str, ...] = DEFAULT_SCENARIOS,
     strategies: list[str] | tuple[str, ...] = DEFAULT_STRATEGIES,
     seeds: list[int] | tuple[int, ...] = (1, 2, 3, 4, 5),
-    ticks: int | None = 600,
+    ticks: int | None = 900,
     progress: bool = False,
 ) -> BenchmarkResult:
     """Run every (scenario, strategy, seed) combination headlessly."""

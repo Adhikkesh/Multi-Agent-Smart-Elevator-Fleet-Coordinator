@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from elevator_mas.agents.base import CommunicatingAgent
-from elevator_mas.comms import Performative
+from elevator_mas.comms import Message, Order, Performative
 from elevator_mas.domain import AuctionRound, Bid, Direction, HallCall
 from elevator_mas.optimization import (
     MinimaxResult,
@@ -39,21 +39,26 @@ class DispatcherAgent(CommunicatingAgent):
        baseline, hill climbing with random restarts on expected response time, or minimax
        with alpha-beta for a worst-case guarantee.
 
+    **What it can see, and how it acts.** Only its own inbox and the public fleet status
+    board. It never calls a car's methods or reads a car's private state: a bid arrives
+    as a number in a PROPOSE, a pickup as an INFORM, a breakdown as a FAILURE, and every
+    decision leaves as a message the car carries out on its own turn.
+
     PEAS
       - **P** fleet-wide average and 95th-percentile wait, % of long waits, fairness,
         energy, and recovery from failures.
       - **E** every floor, every car, the hall calls, and the traffic pattern.
-      - **A** CFP / ACCEPT / REJECT / CANCEL messages, parking orders.
-      - **S** REQUESTs from floors, PROPOSEs and REFUSEs from cars, FAILURE reports,
-        traffic-pattern advice from the monitor.
+      - **A** CFP / ACCEPT / REJECT / CANCEL messages, parking advice.
+      - **S** REQUESTs from floors, PROPOSEs and REFUSEs from cars, FAILURE and pickup
+        reports, traffic-pattern advice from the monitor, the fleet status board.
     """
 
     agent_type = "Utility-based coordinator (auctioneer)"
     peas = {
         "performance": "fleet AWT/P95, % long waits, fairness, energy, fault recovery",
         "environment": "all floors, all cars, outstanding hall calls, traffic pattern",
-        "actuators": "CFP/ACCEPT/REJECT/CANCEL messages, parking orders",
-        "sensors": "floor REQUESTs, car PROPOSEs/REFUSEs, FAILUREs, monitor advice",
+        "actuators": "CFP/ACCEPT/REJECT/CANCEL messages, parking advice",
+        "sensors": "floor REQUESTs, car PROPOSEs/REFUSEs, FAILUREs, pickups, status board",
     }
 
     def __init__(self, model: Any) -> None:
@@ -71,48 +76,22 @@ class DispatcherAgent(CommunicatingAgent):
         self.monitor_advice_received: bool = False
         self._next_reassign = model.config.planner.reassign_interval
         self.unassigned: dict[HallCall, dict[str, Any]] = {}
+        self._mailbox: list[Message] = []
+        self._open_round: tuple[HallCall, dict[str, Any]] | None = None
+        self._moved_this_tick: dict[HallCall, tuple[int | None, int]] = {}
 
     # ------------------------------------------------------------------ sensing
 
     def sense(self) -> None:
-        """Collect REQUESTs and FAILUREs, and drop calls that have been served."""
-        self.collect_mail()
-        for message in self.mail_of(Performative.REQUEST):
-            call = message.content["call"]
-            if self.hall_calls_blocked:
-                continue
-            record = {
-                "call": call,
-                "urgency": int(message.content.get("urgency", 0)),
-                "conversation_id": message.conversation_id,
-                "waiting": message.content.get("waiting", 1),
-                "since": message.content.get("since", self.model.tick),
-            }
-            # An escalation supersedes the earlier request for the same call.
-            self.pending_calls[call] = record
+        """Read the mail that arrived since the last tick, then tidy finished calls.
 
-        for message in self.mail_of(Performative.INFORM):
-            # The learning agent's advice. Acting on it is what makes the monitor an
-            # agent rather than a read-out: it changes the parking policy the dispatcher
-            # actually uses on the next cycle.
-            if "parking_policy" in message.content:
-                self.advised_parking_policy = message.content["parking_policy"]
-                self.monitor_advice_received = True
-
-        for message in self.mail_of(Performative.FAILURE):
-            car_id = message.content.get("car_id")
-            released = message.content.get("released", [])
-            for call in released:
-                if isinstance(call, HallCall):
-                    self.assignments.pop(call, None)
-                    self.pending_calls[call] = {
-                        "call": call,
-                        "urgency": 1,
-                        "conversation_id": self.model.new_conversation_id(),
-                        "waiting": self.model.waiting_count(call.floor, call.direction),
-                        "since": self.model.tick,
-                    }
-            self.assignments = {c: v for c, v in self.assignments.items() if v != car_id}
+        REQUESTs (new or escalated calls), the monitor's advice, cars' FAILURE reports
+        and pickup notices are all handled here, at the start of the tick, so every
+        decision this tick is made from the same picture of the world.
+        """
+        self.inbox = []
+        for message in self._take_mail():
+            self._handle(message)
 
         # Forget assignments whose calls no longer exist (everyone boarded).
         for call in list(self.assignments):
@@ -120,58 +99,141 @@ class DispatcherAgent(CommunicatingAgent):
                 self.assignments.pop(call, None)
                 self.picked_up.discard(call)
 
+    def _take_mail(self, keep: Any = None) -> list[Message]:
+        """Fetch new mail into the mailbox and take the messages `keep` selects.
+
+        Messages that are not taken stay in the mailbox for a later stage. This is how
+        the auctioneer reads only the proposals for the round it has open, leaving a
+        floor's fresh REQUEST for the next tick exactly as a real dispatcher would.
+        """
+        self._mailbox.extend(self.receive())
+        if keep is None:
+            taken, self._mailbox = self._mailbox, []
+            return taken
+        taken = [m for m in self._mailbox if keep(m)]
+        self._mailbox = [m for m in self._mailbox if not keep(m)]
+        return taken
+
+    def _handle(self, message: Message) -> None:
+        """React to one message outside an auction round."""
+        content = message.content
+        performative = message.performative
+        if performative is Performative.REQUEST:
+            order = content.get("order")
+            if isinstance(order, Order):
+                self._obey(order)
+            elif "call" in content and not self.hall_calls_blocked:
+                call = content["call"]
+                # An escalation supersedes the earlier request for the same call.
+                self.pending_calls[call] = {
+                    "call": call,
+                    "urgency": int(content.get("urgency", 0)),
+                    "conversation_id": message.conversation_id,
+                    "waiting": content.get("waiting", 1),
+                    "since": content.get("since", self.model.tick),
+                }
+        elif performative is Performative.INFORM:
+            if "parking_policy" in content:
+                # The learning agent's advice. Acting on it is what makes the monitor an
+                # agent rather than a read-out: it changes the parking policy the
+                # dispatcher actually uses on the next cycle.
+                self.advised_parking_policy = content["parking_policy"]
+                self.monitor_advice_received = True
+            if "picked_up" in content:
+                self.picked_up.update(c for c in content["picked_up"] if isinstance(c, HallCall))
+        elif performative is Performative.FAILURE:
+            self._recover_from_failure(message)
+
+    def _recover_from_failure(self, message: Message) -> None:
+        """A car has failed or handed work back: re-auction what it can no longer serve.
+
+        Only calls that are still this car's responsibility are re-auctioned; one that a
+        reassignment has already moved elsewhere is left with its new owner.
+        """
+        car_id = message.content.get("car_id")
+        for call in message.content.get("released", []):
+            if not isinstance(call, HallCall):
+                continue
+            owner = self.assignments.get(call)
+            if owner is not None and owner != car_id:
+                continue
+            self.assignments.pop(call, None)
+            if not self.model.has_waiting(call.floor, call.direction):
+                continue
+            self.pending_calls[call] = {
+                "call": call,
+                "urgency": 1,  # a stranded caller has already waited: bump the urgency
+                "conversation_id": self.model.new_conversation_id(),
+                "waiting": self.model.waiting_count(call.floor, call.direction),
+                "since": self.model.tick,
+            }
+        self.assignments = {c: v for c, v in self.assignments.items() if v != car_id}
+
+    def _obey(self, order: Order) -> None:
+        """Carry out a safety order addressed to the dispatcher."""
+        if order is Order.BLOCK_HALL_CALLS:
+            self.block_hall_calls()
+        elif order is Order.RESTORE_SERVICE:
+            self.unblock_hall_calls()
+
     # ------------------------------------------------------- Contract Net round
 
-    def communicate(self) -> None:
-        """Run one Contract Net round for every outstanding call."""
+    @property
+    def round_open(self) -> bool:
+        """Whether a Contract Net round is open (announced but not yet awarded)."""
+        return self._open_round is not None
+
+    def announce(self) -> bool:
+        """Negotiation sub-stage 1: broadcast a CFP for the next queued call.
+
+        Returns False (and leaves no round open) when there is nothing left to auction
+        this tick. Calls are auctioned one at a time, so each car bids knowing every
+        award made before it — exactly the information a sequential Contract Net gives
+        its bidders.
+        """
         if self.hall_calls_blocked:
             self.pending_calls.clear()
-            return
-        for call, record in list(self.pending_calls.items()):
-            self._run_auction(call, record)
-            self.pending_calls.pop(call, None)
-
-    def _run_auction(self, call: HallCall, record: dict[str, Any]) -> None:
-        """One CFP → PROPOSE/REFUSE → ACCEPT/REJECT cycle.
-
-        The bids are gathered synchronously here rather than across ticks. Every message
-        is still created and logged, so the protocol the dashboard shows is real; doing
-        it in one tick simply means a caller is never left waiting several seconds for
-        the fleet to finish deliberating.
-
-        Non-auction strategies reach this method too, but score the cars with their own
-        simpler rule instead of asking for marginal-cost bids. Routing them through the
-        same code keeps the comparison fair: identical protocol accounting, identical
-        award and INFORM handling, only the scoring differs.
-        """
-        conversation_id = record["conversation_id"]
-        urgency = record["urgency"]
-        cars = self.model.cars
-        assignment_rule = self.model.strategy.assignment
-
+            return False
+        if not self.pending_calls:
+            return False
+        call, record = next(iter(self.pending_calls.items()))
+        self.pending_calls.pop(call)
+        self._open_round = (call, record)
         self.send(
             Performative.CFP,
             None,  # broadcast to every car
-            conversation_id,
-            {"call": call, "urgency": urgency, "waiting": record["waiting"]},
+            record["conversation_id"],
+            {"call": call, "urgency": record["urgency"], "waiting": record["waiting"]},
+        )
+        return True
+
+    def award(self) -> None:
+        """Negotiation sub-stage 3: read the proposals for the open round and award it.
+
+        The dispatcher sees only what the cars sent: a number and its breakdown in each
+        PROPOSE, or a reason in each REFUSE. It never inspects a car to check.
+        """
+        if self._open_round is None:
+            return
+        call, record = self._open_round
+        self._open_round = None
+        conversation_id = record["conversation_id"]
+        replies = self._take_mail(
+            lambda m: (
+                m.conversation_id == conversation_id
+                and m.performative in (Performative.PROPOSE, Performative.REFUSE)
+            )
         )
 
         bids: list[Bid] = []
-        for car in cars:
-            if assignment_rule == "nearest":
-                bid = self._nearest_car_score(car, call)
-            elif assignment_rule == "look":
-                bid = self._collective_score(car, call)
+        for reply in replies:
+            car_id = int(reply.content["car_id"])
+            if reply.performative is Performative.PROPOSE:
+                bids.append(reply.content["bid"])
             else:
-                bid = car.marginal_cost(call, urgency)
-            bids.append(bid)
-            performative = Performative.REFUSE if bid.refused else Performative.PROPOSE
-            content: dict[str, Any] = {"call": call, "car_id": car.car_id}
-            if bid.refused:
-                content["reason"] = bid.reason
-            else:
-                content["bid"] = bid
-            car.send(performative, self.address, conversation_id, content)
+                reason = str(reply.content.get("reason", "refused"))
+                bids.append(Bid(car_id=car_id, total=float("inf"), refused=True, reason=reason))
+        bids.sort(key=lambda b: b.car_id)
 
         viable = [b for b in bids if not b.refused]
         round_record = AuctionRound(
@@ -180,8 +242,10 @@ class DispatcherAgent(CommunicatingAgent):
 
         if viable:
             # Tie-break on car id so the award is reproducible from the seed.
-            winner = min(viable, key=lambda b: (b.total, b.car_id))
+            ranked = sorted(viable, key=lambda b: (b.total, b.car_id))
+            winner = ranked[0]
             round_record.winner = winner.car_id
+            round_record.reason = explain_award(call, winner, ranked, bids)
             self.assignments[call] = winner.car_id
             for bid in viable:
                 performative = (
@@ -195,23 +259,13 @@ class DispatcherAgent(CommunicatingAgent):
                     conversation_id,
                     {"call": call, "cost": bid.total},
                 )
-            car = self.model.car(winner.car_id)
-            if car is not None:
-                car.accept_call(call)
-                car.send(
-                    Performative.INFORM,
-                    f"floor-{call.floor}",
-                    conversation_id,
-                    {
-                        "car_id": car.car_id,
-                        "direction": call.direction,
-                        "eta": winner.eta,
-                    },
-                )
             self.unassigned.pop(call, None)
         else:
             # Everyone refused (all full, or the fleet is in fire mode). Keep the call so
             # the floor's aging escalation brings it back rather than losing it.
+            round_record.reason = "no car could take it: " + ", ".join(
+                f"car {b.car_id} {b.reason}" for b in bids
+            )
             self.unassigned[call] = record
 
         self.last_auction = round_record
@@ -220,70 +274,29 @@ class DispatcherAgent(CommunicatingAgent):
             del self.auction_history[:-50]
         self.model.collector.total_calls += 1
 
-    def _nearest_car_score(self, car: Any, call: HallCall) -> Bid:
-        """Nearest-car reflex score: distance only, with idle cars preferred.
-
-        The classic baseline. It ignores what the car is already committed to, which is
-        exactly its weakness: a car three floors away with eight stops still queued beats
-        an empty car five floors away.
-        """
-        if not car.available:
-            reason = "out of service" if car.out_of_service else "fire mode"
-            return Bid(car_id=car.car_id, total=float("inf"), refused=True, reason=reason)
-        if car.space <= 0:
-            return Bid(car_id=car.car_id, total=float("inf"), refused=True, reason="full")
-        distance = abs(car.floor - call.floor)
-        busy_penalty = 0.0 if not car.assigned_calls and not car.riders else 8.0
-        total = float(distance) + busy_penalty
-        return Bid(
-            car_id=car.car_id,
-            total=total,
-            wait=float(distance),
-            crowding=busy_penalty,
-            eta=distance * float(self.model.config.timing.seconds_per_floor),
-        )
-
-    def _collective_score(self, car: Any, call: HallCall) -> Bid:
-        """Collective/LOOK score: strongly prefer a car already sweeping towards the call.
-
-        This is how conventional lift control behaves — a call is picked up by a car that
-        is coming that way anyway — and it is a much better baseline than nearest-car
-        because it avoids sending cars backwards.
-        """
-        if not car.available:
-            reason = "out of service" if car.out_of_service else "fire mode"
-            return Bid(car_id=car.car_id, total=float("inf"), refused=True, reason=reason)
-        if car.space <= 0:
-            return Bid(car_id=car.car_id, total=float("inf"), refused=True, reason="full")
-
-        distance = abs(car.floor - call.floor)
-        seconds_per_floor = float(self.model.config.timing.seconds_per_floor)
-        approaching = car.direction is Direction.IDLE or (
-            car.direction is call.direction and (call.floor - car.floor) * car.direction.sign >= 0
-        )
-        # A car that must finish its sweep and come back pays for the whole detour.
-        detour = 0.0 if approaching else 2.0 * self.model.config.building.floors
-        queue_penalty = 2.0 * (len(car.assigned_calls) + len(car.car_calls))
-        total = distance * seconds_per_floor + detour + queue_penalty
-        return Bid(
-            car_id=car.car_id,
-            total=total,
-            wait=distance * seconds_per_floor,
-            ride=detour,
-            crowding=queue_penalty,
-            eta=(distance + detour / seconds_per_floor) * seconds_per_floor,
-        )
-
     # ------------------------------------------ periodic global reassignment (SA)
 
     def decide(self) -> None:
-        """Retry refused calls, then periodically re-optimise the whole assignment."""
+        """Obey any safety order, retry refused calls, then periodically re-optimise.
+
+        Only safety orders are read here; a floor's REQUEST that arrived during this
+        tick waits for tomorrow's `sense`, so every auction is run from one consistent
+        snapshot of the building.
+        """
+        self._moved_this_tick = {}
+        for message in self._take_mail(
+            lambda m: (
+                m.performative is Performative.REQUEST and isinstance(m.content.get("order"), Order)
+            )
+        ):
+            self._obey(message.content["order"])
         if self.hall_calls_blocked:
             return
 
+        board = self.model.board
         for call, record in list(self.unassigned.items()):
             if self.model.has_waiting(call.floor, call.direction):
-                if any(car.available and car.space > 0 for car in self.model.cars):
+                if board.available_car_ids(with_space=True):
                     self.unassigned.pop(call)
                     self.pending_calls[call] = record
             else:
@@ -326,19 +339,20 @@ class DispatcherAgent(CommunicatingAgent):
         dwell = float(self.model.config.timing.door_open + self.model.config.timing.door_close)
 
         for car_id, calls in per_car.items():
-            car = self.model.car(car_id)
-            if car is None or not car.available:
+            status = self.model.board.car(car_id)
+            if status is None or not status.available:
                 total += 1e6 * len(calls)  # an unusable car must never look attractive
                 continue
 
-            # Start from the work the car is already committed to. Ignoring it was the
-            # mistake that made an earlier version of this objective actively harmful:
-            # SA would pile new calls onto a car that looked "close" while it still had a
-            # full load to deliver, improving this estimate but worsening real waits.
-            position = car.floor
-            elapsed = float(car.eta_to(car.planned_stops[-1].floor)) if car.planned_stops else 0.0
-            if car.planned_stops:
-                position = car.planned_stops[-1].floor
+            # Start from the work the car is already committed to, as it published it on
+            # the status board. Ignoring that work was the mistake that made an earlier
+            # version of this objective actively harmful: SA would pile new calls onto a
+            # car that looked "close" while it still had a full load to deliver,
+            # improving this estimate but worsening real waits.
+            position = status.floor
+            elapsed = status.plan_end_eta if status.plan_end_floor is not None else 0.0
+            if status.plan_end_floor is not None:
+                position = status.plan_end_floor
 
             # Order the calls the way the car will actually serve them: a directional
             # sweep from where it finishes its current plan, which is what its own A*
@@ -354,7 +368,7 @@ class DispatcherAgent(CommunicatingAgent):
                 position = call.floor
 
             # Penalise stacking calls on one car, counting the load it already carries.
-            committed = len(car.car_calls) + len(calls)
+            committed = len(status.car_calls) + len(calls)
             total += 3.0 * committed**2
         return total
 
@@ -373,7 +387,7 @@ class DispatcherAgent(CommunicatingAgent):
         current = self.reassignable()
         if len(current) < 2:
             return
-        car_ids = [car.car_id for car in self.model.cars if car.available and car.space > 0]
+        car_ids = self.model.board.available_car_ids(with_space=True)
         if len(car_ids) < 2:
             return
 
@@ -398,50 +412,41 @@ class DispatcherAgent(CommunicatingAgent):
         if result.improvement <= planner.hysteresis:
             return
 
+        # Adopt it by message: CANCEL to the car that loses a call, ACCEPT_PROPOSAL to the
+        # car that gains it. Each car carries the change out itself when it reads its
+        # inbox later this tick, and the gaining car lights the new hall lantern.
         conversation_id = self.model.new_conversation_id()
         for call, new_car in result.assignment.items():
             old_car = current.get(call)
             if old_car == new_car:
                 continue
             self.assignments[call] = new_car
-            old = self.model.car(old_car) if old_car is not None else None
-            if old is not None:
+            self._moved_this_tick[call] = (old_car, new_car)
+            if old_car is not None:
                 self.send(
                     Performative.CANCEL,
-                    old.address,
+                    f"car-{old_car}",
                     conversation_id,
                     {"call": call, "reason": "global reassignment"},
                 )
-                old.drop_call(call)
-            new = self.model.car(new_car)
-            if new is not None:
-                self.send(
-                    Performative.ACCEPT_PROPOSAL,
-                    new.address,
-                    conversation_id,
-                    {"call": call, "reason": "global reassignment"},
-                )
-                new.accept_call(call)
-                new.send(
-                    Performative.INFORM,
-                    f"floor-{call.floor}",
-                    conversation_id,
-                    {
-                        "car_id": new.car_id,
-                        "direction": call.direction,
-                        "eta": new.eta_to(call.floor),
-                    },
-                )
+            self.send(
+                Performative.ACCEPT_PROPOSAL,
+                f"car-{new_car}",
+                conversation_id,
+                {"call": call, "reason": "global reassignment"},
+            )
 
     # ------------------------------------------------------------ idle-car parking
 
     def park_idle_cars(self) -> None:
-        """Send idle cars to floors chosen by hill climbing or by minimax."""
-        idle = [
-            car
-            for car in self.model.cars
-            if car.available and not car.assigned_calls and not car.riders
-        ]
+        """Advise idle cars where to wait, chosen by hill climbing or by minimax.
+
+        Idleness is read from the status board, corrected for the reassignments this
+        dispatcher has just ordered (it knows what it asked for, even though the cars
+        have not read their mail yet). Advice goes out as INFORM messages; a car that no
+        longer needs a parking spot is told so explicitly.
+        """
+        idle = [status for status in self.model.board.cars() if self._is_idle(status)]
         if not idle:
             self.last_parking = {}
             return
@@ -454,41 +459,57 @@ class DispatcherAgent(CommunicatingAgent):
         if policy is None:
             # The monitor has concluded that repositioning would not pay in this pattern.
             self.last_parking = {}
-            for car in idle:
-                car.park_target = None
+            for status in idle:
+                self._advise_parking(status, None, "none")
             return
         floors = self.model.config.building.floors
-        demand = self.model.monitor.demand_estimate()
+        demand = self.model.board.demand()
 
         if policy == "lobby":
-            targets = {car.car_id: self.model.lobby for car in idle}
+            targets = {status.car_id: self.model.lobby for status in idle}
         elif policy == "minimax":
             candidates = self._candidate_spots(floors, demand)
             likely = self._likely_call_floors(demand)
             result = minimax_parking(len(idle), floors, candidates, likely)
             self.last_minimax = result
             targets = {
-                car.car_id: spot for car, spot in zip(idle, result.best_parking, strict=False)
+                status.car_id: spot for status, spot in zip(idle, result.best_parking, strict=False)
             }
         else:
             positions, _cost, _curve = hill_climbing_parking(
-                [car.car_id for car in idle], floors, demand, self.model.random
+                [status.car_id for status in idle], floors, demand, self.model.random
             )
             targets = positions
 
         self.last_parking = targets
-        for car in idle:
-            target = targets.get(car.car_id)
-            if target is not None and target != car.floor:
-                car.park_target = target
-                self.send(
-                    Performative.INFORM,
-                    car.address,
-                    self.model.new_conversation_id(),
-                    {"park_at": target, "policy": policy},
-                )
-            else:
-                car.park_target = None
+        for status in idle:
+            target = targets.get(status.car_id)
+            self._advise_parking(
+                status, target if target is not None and target != status.floor else None, policy
+            )
+
+    def _is_idle(self, status: Any) -> bool:
+        """In service and without work, counting reassignments ordered this tick."""
+        if not status.available or status.riders:
+            return False
+        calls = set(status.assigned_calls)
+        for call, (old_car, new_car) in self._moved_this_tick.items():
+            if old_car == status.car_id:
+                calls.discard(call)
+            if new_car == status.car_id:
+                calls.add(call)
+        return not calls
+
+    def _advise_parking(self, status: Any, target: int | None, policy: str) -> None:
+        """Tell one idle car where to park, or that it should stop heading anywhere."""
+        if target is None and status.park_target is None:
+            return  # nothing to change, so nothing to say
+        self.send(
+            Performative.INFORM,
+            status.address,
+            self.model.new_conversation_id(),
+            {"park_at": target, "policy": policy},
+        )
 
     def _candidate_spots(self, floors: int, demand: dict[int, float]) -> list[int]:
         """A small, spread-out set of parking floors for the minimax game.
@@ -522,23 +543,6 @@ class DispatcherAgent(CommunicatingAgent):
         """Alarm cleared: accept hall calls again."""
         self.hall_calls_blocked = False
 
-    def reauction(self, calls: list[HallCall]) -> int:
-        """Queue a failed car's calls for the next Contract Net round."""
-        queued = 0
-        for call in calls:
-            if not self.model.has_waiting(call.floor, call.direction):
-                continue
-            self.assignments.pop(call, None)
-            self.pending_calls[call] = {
-                "call": call,
-                "urgency": 1,  # a stranded caller has already waited: bump the urgency
-                "conversation_id": self.model.new_conversation_id(),
-                "waiting": self.model.waiting_count(call.floor, call.direction),
-                "since": self.model.tick,
-            }
-            queued += 1
-        return queued
-
     # ------------------------------------------------------------------ reporting
 
     def describe(self) -> dict[str, Any]:
@@ -562,6 +566,33 @@ class DispatcherAgent(CommunicatingAgent):
 
     def step(self) -> None:
         """Mesa's default hook; this agent is driven by the model's staged activation."""
+
+
+def explain_award(call: HallCall, winner: Bid, ranked: list[Bid], bids: list[Bid]) -> str:
+    """One line saying why the winner won: its cost, its biggest component, the margin.
+
+    This is the decision trace the dashboard shows beside each auction, and the record
+    later phases learn from, so it names numbers rather than adjectives.
+    """
+    parts = {
+        "wait": winner.wait,
+        "ride": winner.ride,
+        "crowding": winner.crowding,
+        "energy": winner.energy,
+    }
+    main = max(parts, key=lambda k: parts[k])
+    text = (
+        f"car {winner.car_id} wins {call.floor}{call.direction.name[0]} at cost "
+        f"{winner.total:.1f} (mostly {main} {parts[main]:.1f}, ETA {winner.eta:.0f}s)"
+    )
+    if len(ranked) > 1:
+        runner_up = ranked[1]
+        text += f"; next best car {runner_up.car_id} at {runner_up.total:.1f}"
+        text += f" (+{runner_up.total - winner.total:.1f})"
+    refused = [b for b in bids if b.refused]
+    if refused:
+        text += "; " + ", ".join(f"car {b.car_id} refused ({b.reason})" for b in refused)
+    return text
 
 
 def direction_of(call: HallCall) -> Direction:

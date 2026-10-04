@@ -117,7 +117,7 @@ Poisson arrivals (hidden rate)        Scenario YAML (floors, cars, timings, even
  ┌──────────────────────┐                ┌────────────────────────┐
  │  PassengerAgent      │ simple reflex  │      ElevatorModel     │
  │  (arrive/board/exit) │                │  staged activation:    │
- └──────────┬───────────┘                │  sense→comm→decide→act │
+ └──────────┬───────────┘                │  sense→…→negotiate→act │
             │ presses hall button        └────────────┬───────────┘
             ▼                                         │
  ┌──────────────────────┐  REQUEST                    │
@@ -142,18 +142,35 @@ Poisson arrivals (hidden rate)        Scenario YAML (floors, cars, timings, even
 
 ### 4.1 The tick, and why the stages are fixed
 
-One tick is one simulated second, executed in four stages, each completed by every agent
-of a type before the next begins:
+One tick is one simulated second, executed in staged activation: each stage is completed
+by every agent of a type before the next begins.
 
 ```
-sense  →  communicate  →  decide  →  act  →  collect metrics
+sense → communicate → negotiate → decide → act → learn → collect metrics
+                     (announce → bid → award → commit, repeated per open call)
 ```
+
+`negotiate` is the Contract Net, run as short sub-stages inside the tick: the dispatcher
+announces a CFP, every car reads it from **its own inbox** and replies, the dispatcher
+awards, and the winning car reads the award and commits. It repeats until no call is
+waiting for a decision (one call per round), so a burst of arrivals is settled within the
+same tick instead of leaving passengers waiting for the next one. `learn` is a hook that
+is empty today; the LiftZero network will use it to record outcomes.
 
 Within a tick every agent senses the **same** world state before anyone acts on it. Without
 that, results would depend on activation order rather than on the agents' reasoning, and
 the run would not be reproducible. The SafetyAgent runs its whole cycle before the
 dispatcher's, because safety overrides coordination: if an alarm is raised this tick, hall
 calls are already blocked before any auction could award one.
+
+**The one rule of interaction.** No agent calls another agent's methods. It influences
+others only by sending messages, which the receiver reads from its own inbox on its own
+turn, and it learns about others only from messages and from the **status board**: a shared
+blackboard of public facts (each car's floor, load, door state, assigned calls, planned end
+of route; the fleet's current weights and demand estimate). Only the owner writes its own
+entry, and entries are immutable snapshots. `tests/test_messaging.py` enforces the rule with
+a spy that fails if a dispatcher or safety method is ever on the call stack of a car's bid,
+accept, drop or out-of-service routine.
 
 ### 4.2 Module layout
 
@@ -189,7 +206,11 @@ content and tick. Nine performatives are used: `REQUEST`, `CFP`, `PROPOSE`, `REF
 
 Delivery is queue-based rather than a direct method call. Agents only ever read their own
 inbox, which keeps the multi-agent interaction real — and visible — instead of a hidden
-function call. Every message is logged.
+function call. Every message is logged. Besides the auction, the same channel carries
+**orders**: the SafetyAgent supervises the fleet with `REQUEST` messages whose content
+holds an `Order` (`FIRE_RECALL`, `HOLD_DOORS_OPEN`, `REFUSE_BOARDING`, `REOPEN_DOORS`,
+`OUT_OF_SERVICE`, `RETURN_TO_SERVICE`, `BLOCK_HALL_CALLS`, `RESTORE_SERVICE`), and the
+cars and the dispatcher obey on their own turn.
 
 ### 5.1 Contract Net, per hall call
 
@@ -198,7 +219,8 @@ FloorAgent        DispatcherAgent        ElevatorAgent(s)          FloorAgent
     │                    │                      │                      │
     │── REQUEST ────────▶│                      │                      │
     │   (call, urgency)  │── CFP (broadcast) ──▶│                      │
-    │                    │                 [each car plans with A* and
+    │                    │             [each car, from its own inbox,
+    │                    │              plans with A* and
     │                    │                  prices the marginal cost of
     │                    │                  inserting the call]
     │                    │◀── PROPOSE (cost) ───│ available cars       │
@@ -230,9 +252,17 @@ sequenceDiagram
     D->>C: CANCEL / ACCEPT_PROPOSAL (reassignment)
 ```
 
-Bids are gathered synchronously within one tick. Every message is still created and
-logged, so the protocol shown in the dashboard is genuine; doing it in one tick simply
-means a caller is never left waiting several seconds while the fleet deliberates.
+The whole round happens inside the `negotiate` stage of one tick, so a caller is never left
+waiting several seconds while the fleet deliberates. Every step is a real message that a
+car reads from its own inbox; the dispatcher never computes a bid on a car's behalf. Each
+award also gets a one-line **decision trace** (`AuctionRound.reason`), for example which
+car won, by how much, and what the runner-up would have cost, shown in the dashboard.
+
+Failure handling is also by message. A car that is faulted between bidding and being
+awarded answers the award with `FAILURE` and the calls are re-auctioned; an
+`OUT_OF_SERVICE` order makes the car hand its calls back the same way. Reassignment by
+simulated annealing sends `CANCEL` to the car that loses a call and `ACCEPT_PROPOSAL`
+(reason "global reassignment") to the car that gains it.
 
 ---
 

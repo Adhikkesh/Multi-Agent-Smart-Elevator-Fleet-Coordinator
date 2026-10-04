@@ -80,7 +80,7 @@ def bench(
         str | None, typer.Option(help="Comma-separated strategies (default: all four).")
     ] = None,
     seeds: Annotated[int, typer.Option(help="How many seeds per combination.")] = 5,
-    ticks: Annotated[int, typer.Option(help="Ticks per run.")] = 600,
+    ticks: Annotated[int, typer.Option(help="Ticks per run.")] = 900,
     out: Annotated[Path, typer.Option(help="Output directory for CSVs and charts.")] = Path(
         "reports"
     ),

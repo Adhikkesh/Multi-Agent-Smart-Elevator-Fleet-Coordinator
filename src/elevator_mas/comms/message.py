@@ -27,6 +27,24 @@ class Performative(Enum):
     FAILURE = "FAILURE"
 
 
+class Order(Enum):
+    """The actions the SafetyAgent may REQUEST of other agents.
+
+    Safety is a supervisor, not a puppeteer: it asks, and each agent carries the order
+    out itself when it next reads its inbox. Keeping the vocabulary closed and explicit
+    is what makes every safety intervention visible in the message log.
+    """
+
+    FIRE_RECALL = "fire_recall"
+    HOLD_DOORS_OPEN = "hold_doors_open"
+    BLOCK_HALL_CALLS = "block_hall_calls"
+    RESTORE_SERVICE = "restore_service"
+    OUT_OF_SERVICE = "out_of_service"
+    RETURN_TO_SERVICE = "return_to_service"
+    REFUSE_BOARDING = "refuse_boarding"
+    REOPEN_DOORS = "reopen_doors"
+
+
 _counter = itertools.count(1)
 
 

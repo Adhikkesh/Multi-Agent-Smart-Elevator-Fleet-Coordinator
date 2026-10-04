@@ -217,7 +217,7 @@ observable** for up-peak traffic and would let the dispatcher group passengers b
 | --- | --- |
 | How many agents? | 6 types; ~22 instances by default (15 floors + 4 cars + 3 singletons) |
 | Which AIMA chapters? | 2 (agents, PEAS), 3 (search), 4 (local search), 5 (adversarial), 7 & 9 (logic), plus multiagent §2.4 |
-| Tests? | 182 passing, 95 % coverage |
+| Tests? | 200 passing, 96 % coverage |
 | A* vs UCS, measured? | 41 vs 98 nodes expanded, identical cost 375 |
 | Alpha-beta saving? | 105 → 47 nodes, identical value |
 | Messages per call? | ~12 |

@@ -183,6 +183,9 @@ class AuctionRound:
     call: HallCall
     bids: list[Bid] = field(default_factory=list)
     winner: int | None = None
+    #: The decision trace: one line naming the winner's cost, what drove it, and the
+    #: margin over the runner-up (or why nobody could take the call).
+    reason: str = ""
 
     def as_dict(self) -> dict[str, object]:
         """JSON-friendly form for the API."""
@@ -193,4 +196,5 @@ class AuctionRound:
             "direction": self.call.direction.name,
             "bids": [b.as_dict() for b in self.bids],
             "winner": self.winner,
+            "reason": self.reason,
         }

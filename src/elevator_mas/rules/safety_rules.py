@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from elevator_mas.comms import Order
 from elevator_mas.rules.engine import Fact, ForwardChainingEngine, Rule
 
 
@@ -45,10 +46,9 @@ def _fire_recall_conclude(binding: dict[str, Any], world: Any) -> Iterable[Fact]
 
 
 def _fire_recall_act(binding: dict[str, Any], world: Any) -> str:
-    """Send the car to the lobby in fire mode, dropping its assignments."""
-    car = world.car(binding["car"])
-    car.enter_fire_mode(world.lobby)
-    return f"car {car.car_id} recalled to lobby {world.lobby}"
+    """Order the car to the lobby in fire mode (it drops its assignments itself)."""
+    world.recall(binding["car"])
+    return f"car {binding['car']} recalled to lobby {world.lobby}"
 
 
 def _fire_doors_condition(wm: set[Fact], world: Any) -> list[dict[str, Any]]:
@@ -69,10 +69,9 @@ def _fire_doors_conclude(binding: dict[str, Any], world: Any) -> Iterable[Fact]:
 
 
 def _fire_doors_act(binding: dict[str, Any], world: Any) -> str:
-    """Hold the doors open so occupants can leave."""
-    car = world.car(binding["car"])
-    car.hold_doors_open()
-    return f"car {car.car_id} holding doors open at lobby"
+    """Order the doors held open so occupants can leave."""
+    world.order(binding["car"], Order.HOLD_DOORS_OPEN)
+    return f"car {binding['car']} holding doors open at lobby"
 
 
 def _block_calls_condition(wm: set[Fact], world: Any) -> list[dict[str, Any]]:
@@ -116,8 +115,8 @@ def _fault_conclude(binding: dict[str, Any], world: Any) -> Iterable[Fact]:
 def _fault_act(binding: dict[str, Any], world: Any) -> str:
     """Stop the car at the next floor, turn out its riders and re-auction its calls."""
     car_id = binding["car"]
-    reassigned = world.take_out_of_service(car_id)
-    return f"car {car_id} out of service; {reassigned} call(s) re-auctioned"
+    released = world.take_out_of_service(car_id)
+    return f"car {car_id} out of service; {released} call(s) handed back for re-auction"
 
 
 def _overload_condition(wm: set[Fact], world: Any) -> list[dict[str, Any]]:
@@ -137,11 +136,11 @@ def _overload_conclude(binding: dict[str, Any], world: Any) -> Iterable[Fact]:
 
 
 def _overload_act(binding: dict[str, Any], world: Any) -> str:
-    """Hold the doors and refuse further boarding until the load is legal."""
-    car = world.car(binding["car"])
-    car.refuse_boarding()
+    """Order the doors held and boarding refused until the load is legal."""
+    world.order(binding["car"], Order.REFUSE_BOARDING)
     return (
-        f"car {car.car_id} overloaded ({binding['load']}>{binding['capacity']}): boarding refused"
+        f"car {binding['car']} overloaded ({binding['load']}>{binding['capacity']}): "
+        "boarding refused"
     )
 
 
@@ -156,10 +155,9 @@ def _obstruction_condition(wm: set[Fact], world: Any) -> list[dict[str, Any]]:
 
 
 def _obstruction_act(binding: dict[str, Any], world: Any) -> str:
-    """Re-open the doors and restart the dwell."""
-    car = world.car(binding["car"])
-    car.reopen_doors()
-    return f"car {car.car_id} door obstruction cleared by re-opening"
+    """Order the doors re-opened and the dwell restarted."""
+    world.order(binding["car"], Order.REOPEN_DOORS)
+    return f"car {binding['car']} door obstruction cleared by re-opening"
 
 
 def _fire_clear_condition(wm: set[Fact], world: Any) -> list[dict[str, Any]]:

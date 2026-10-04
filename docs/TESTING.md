@@ -1,13 +1,13 @@
 # Testing and results
 
 ```bash
-uv run pytest                 # 182 tests, ~15 s
+uv run pytest                 # 200 tests, ~15 s
 uv run pytest --cov           # coverage of the core logic
 uv run elevator verify        # run every scenario, assert the invariants
 uv run elevator bench         # regenerate reports/
 ```
 
-**182 tests pass. Coverage of the package is 95 %** (target was 85 %).
+**200 tests pass. Coverage of the package is 96 %** (target was 85 %).
 
 ---
 
@@ -77,6 +77,19 @@ termination of a self-satisfying rule) and the behaviour they produce:
 > This suite found a real bug: each car was replying to the broadcast CFP *and* being
 > polled directly by the dispatcher, so every proposal was logged twice. Fixing it cut
 > messages per call from 16.4 to **12.3**.
+
+### 1.4b Message-driven interaction — `tests/test_messaging.py` (18 tests)
+
+| Property | Check |
+| --- | --- |
+| No direct calls | a spy proves the dispatcher and safety agent are never on the stack of a car's bid/accept/drop/out-of-service routine |
+| Reassignment by message | every global reassignment is a `CANCEL` plus an `ACCEPT_PROPOSAL` |
+| One INFORM per award | the winning car tells the floor exactly once |
+| One reply per car per CFP | every car answers, once, to the auctioneer |
+| Decision trace | every award carries a non-empty explanation |
+| Stage order | `sense, communicate, negotiate, decide, act, learn`; no round left open across ticks |
+| Safety by orders | faults and fire alarms appear as `REQUEST` orders and show on the status board |
+| Status board | immutable snapshots, availability filter, policy published by the monitor, never stale |
 
 ### 1.5 Whole-run invariants — `tests/test_simulation.py` (23 tests)
 
@@ -239,6 +252,6 @@ Recorded because the process is itself part of the case study.
 | **Stale assigned calls** | Cars kept pickups nobody was waiting for, stopping for no one and inflating their own bids. | `prune_stale_calls()` every tick. Stops fell from 2 388 to 147; average wait 158.9 s → 39.4 s. |
 | **Silent floors** | A landing whose call was already "pressed" never re-requested when its assigned car filled and left, so a queue grew with nobody coming. | The floor re-requests when a live call has no assigned car. |
 | **Refusing passengers at drop-off stops** | A car stopping only to let riders out reported *no* serving direction and refused everyone waiting. Worst in down-peak, where nearly every stop is a drop-off. | Infer the onward direction from the remaining plan when the direction flag is momentarily clear. |
-| **Duplicate CFP replies** | Every car answered the broadcast CFP *and* was polled by the dispatcher, double-logging every proposal. | The car ignores the broadcast; the dispatcher's synchronous round is authoritative. Messages per call: 16.4 → 12.3. |
+| **Duplicate CFP replies** | Every car answered the broadcast CFP *and* was polled by the dispatcher, double-logging every proposal. | Superseded in v2: the dispatcher no longer computes bids at all; each car answers its CFP once from its own inbox, which `test_messaging.py` checks. |
 | **SA optimising the wrong thing** | The reassignment objective ignored work a car was already committed to, so SA "improved" its own estimate while worsening real waits (33.8 s → 47.9 s). | The objective now starts from the car's existing plan and orders calls the way the car will actually serve them. |
 | **Classifier flip-flop** | The traffic pattern oscillated around a single threshold, retuning fleet policy every few ticks. | Hysteresis band (0.07 / 0.10). |

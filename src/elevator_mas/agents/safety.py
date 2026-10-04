@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from elevator_mas.agents.base import CommunicatingAgent
-from elevator_mas.comms import Performative
+from elevator_mas.comms import CarStatus, Order, Performative
 from elevator_mas.rules import FiredRule, build_safety_engine
 
 
@@ -29,12 +29,19 @@ class SafetyAgent(CommunicatingAgent):
     negotiation: the SafetyAgent runs before the dispatcher in the tick and blocks hall
     calls outright, so no auction can award a call during an evacuation.
 
+    It still does not reach into other agents. It *perceives* the fleet through the
+    public status board and *acts* by sending REQUEST messages carrying a closed set of
+    orders (`Order`): recall, hold doors, refuse boarding, go out of service, block hall
+    calls, restore service. Each recipient carries the order out itself when it next
+    reads its inbox — later in the same tick — so every intervention appears in the
+    message log with the rule that caused it.
+
     PEAS
       - **P** zero safety violations: no overloaded car moves, no car runs with its doors
         open, every car recalls on an alarm, no passenger is stranded in a failed car.
       - **E** every car's load, door and fault state, and the building alarm lines.
-      - **A** recall cars, hold or re-open doors, take a car out of service, block hall
-        calls, INFORM the dispatcher.
+      - **A** REQUEST orders: recall cars, hold or re-open doors, take a car out of
+        service, block hall calls, restore service; INFORM the dispatcher.
       - **S** load sensors, door sensors, fault lines, the fire-alarm input.
     """
 
@@ -73,7 +80,7 @@ class SafetyAgent(CommunicatingAgent):
             if car_id is not None:
                 self.engine.assert_fact(("car_fault", car_id))
 
-        for car in self.model.cars:
+        for car in self.cars:
             if car.load > car.capacity:
                 self.engine.assert_fact(("car_overload", car.car_id))
             else:
@@ -102,14 +109,15 @@ class SafetyAgent(CommunicatingAgent):
             )
 
     # -------------------------------- the world interface the rules act through
-    # The rule functions receive this agent as `world`, so these are the only
-    # actuators the rule base can reach. Keeping them here (rather than letting rules
-    # touch the model directly) is what bounds what a safety rule is able to do.
+    # The rule functions receive this agent as `world`, so these are the only sensors
+    # and actuators the rule base can reach: it reads the public status board and it
+    # sends orders. Keeping them here (rather than letting rules touch the model) is
+    # what bounds what a safety rule is able to do.
 
     @property
-    def cars(self) -> list[Any]:
-        """Every car in the fleet."""
-        return self.model.cars
+    def cars(self) -> list[CarStatus]:
+        """Every car's public status, as published on the board."""
+        return self.model.board.cars()
 
     @property
     def lobby(self) -> int:
@@ -121,33 +129,47 @@ class SafetyAgent(CommunicatingAgent):
         """How long a door may stay blocked before rule R6 re-opens it."""
         return 8
 
-    def car(self, car_id: int) -> Any:
-        """One car by id."""
-        return self.model.car(car_id)
+    def car(self, car_id: int) -> CarStatus | None:
+        """One car's public status by id."""
+        return self.model.board.car(car_id)
+
+    def order(self, car_id: int, order: Order, **details: Any) -> None:
+        """REQUEST one car to carry out a safety order."""
+        self.send(
+            Performative.REQUEST,
+            f"car-{car_id}",
+            self.model.new_conversation_id(),
+            {"order": order, **details},
+        )
+
+    def broadcast_order(self, order: Order) -> None:
+        """REQUEST every agent to carry out a fleet-wide order (each obeys its part)."""
+        self.send(Performative.REQUEST, None, self.model.new_conversation_id(), {"order": order})
+
+    def recall(self, car_id: int) -> None:
+        """Order a car to the lobby in fire mode."""
+        self.order(car_id, Order.FIRE_RECALL, lobby=self.lobby)
 
     def block_hall_calls(self) -> None:
-        """Stop the dispatcher accepting hall calls, and clear every landing."""
-        self.model.dispatcher.block_hall_calls()
-        for floor_agent in self.model.floors:
-            floor_agent.clear_calls()
+        """Order the dispatcher and every landing to stop taking hall calls."""
+        self.broadcast_order(Order.BLOCK_HALL_CALLS)
 
     def take_out_of_service(self, car_id: int) -> int:
-        """Fail a car and hand its calls back to the dispatcher for re-auction."""
-        car = self.model.car(car_id)
-        if car is None:
-            return 0
-        released = car.go_out_of_service()
-        return self.model.dispatcher.reauction(released)
+        """Order a car out of service; it hands its calls back for re-auction.
+
+        Returns how many calls the car held, as published, which is what the rule's
+        log line reports.
+        """
+        status = self.model.board.car(car_id)
+        self.order(car_id, Order.OUT_OF_SERVICE)
+        return len(status.assigned_calls) if status is not None else 0
 
     def restore_normal_service(self) -> None:
-        """Leave fire mode across the fleet and accept hall calls again."""
-        for car in self.model.cars:
-            if car.fire_mode:
-                car.restore_normal_service()
-        self.model.dispatcher.unblock_hall_calls()
+        """Order the fleet out of fire mode and the dispatcher to accept calls again."""
+        self.broadcast_order(Order.RESTORE_SERVICE)
         for fact in [("hall_calls_blocked", True), ("fire_cleared", True)]:
             self.engine.retract(fact)
-        for car in self.model.cars:
+        for car in self.cars:
             self.engine.retract(("recalling", car.car_id))
             self.engine.retract(("doors_held_open", car.car_id))
 
@@ -168,12 +190,11 @@ class SafetyAgent(CommunicatingAgent):
         self.engine.assert_fact(("car_fault", car_id))
 
     def clear_fault(self, car_id: int) -> None:
-        """Repair a car and return it to service."""
+        """A repair has been reported: retract the fault and order the car back."""
         self.engine.retract(("car_fault", car_id))
         self.engine.retract(("out_of_service", car_id))
-        car = self.model.car(car_id)
-        if car is not None:
-            car.return_to_service()
+        if self.model.board.car(car_id) is not None:
+            self.order(car_id, Order.RETURN_TO_SERVICE)
 
     # ------------------------------------------------------------------ reporting
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from elevator_mas.agents.base import CommunicatingAgent
-from elevator_mas.comms import Performative
+from elevator_mas.comms import Message, Order, Performative
 from elevator_mas.domain import Direction, HallCall
 
 
@@ -64,26 +64,14 @@ class FloorAgent(CommunicatingAgent):
         not where any of them is going — the partial observability the dispatcher has to
         plan around.
         """
-        self.collect_mail()
+        self.inbox = []
+        for message in self.receive():
+            self._handle(message)
         waiting = self.model.waiting_at(self.floor)
         self.waiting_counts = {
             Direction.UP: sum(1 for p in waiting if p.direction is Direction.UP),
             Direction.DOWN: sum(1 for p in waiting if p.direction is Direction.DOWN),
         }
-
-        for message in self.inbox:
-            content = message.content
-            if message.performative is Performative.INFORM:
-                direction = content.get("direction")
-                if isinstance(direction, Direction):
-                    self.assigned_car[direction] = content.get("car_id")
-                    self.eta[direction] = content.get("eta")
-            elif message.performative in (Performative.FAILURE, Performative.CANCEL):
-                direction = content.get("direction")
-                if isinstance(direction, Direction):
-                    # Our car is gone: forget the lantern and let the call be re-raised.
-                    self.assigned_car[direction] = None
-                    self.eta[direction] = None
 
         # A new button press: someone is waiting in a direction with no live call.
         for direction, count in self.waiting_counts.items():
@@ -118,6 +106,29 @@ class FloorAgent(CommunicatingAgent):
                 self.eta[direction] = None
                 self.escalations[direction] = 0
                 self.call_since.pop(direction, None)
+
+    def _handle(self, message: Message) -> None:
+        """Update the hall lanterns from a car's INFORM, or obey a safety order."""
+        content = message.content
+        if message.performative is Performative.INFORM:
+            direction = content.get("direction")
+            if isinstance(direction, Direction):
+                self.assigned_car[direction] = content.get("car_id")
+                self.eta[direction] = content.get("eta")
+        elif message.performative in (Performative.FAILURE, Performative.CANCEL):
+            direction = content.get("direction")
+            if isinstance(direction, Direction):
+                # Our car is gone: forget the lantern and let the call be re-raised.
+                self.assigned_car[direction] = None
+                self.eta[direction] = None
+        elif message.performative is Performative.REQUEST:
+            if content.get("order") is Order.BLOCK_HALL_CALLS:
+                self.clear_calls()
+
+    def decide(self) -> None:
+        """Read late mail: lantern updates from this tick's awards, and safety orders."""
+        for message in self.receive():
+            self._handle(message)
 
     # ------------------------------------------------------------ communication
 

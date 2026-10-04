@@ -50,7 +50,8 @@ class TrafficMonitorAgent(CommunicatingAgent):
       - **P** accuracy of its rate estimates and of its pattern classification; the
         fleet-wide wait time its advice produces.
       - **E** the stream of passenger arrivals across every floor.
-      - **A** INFORM messages to the dispatcher carrying weights and a parking policy.
+      - **A** INFORM messages to the dispatcher carrying weights and a parking policy;
+        the learned demand and cost weights published on the fleet status board.
       - **S** observed arrivals per floor and direction, per tick.
     """
 
@@ -178,8 +179,16 @@ class TrafficMonitorAgent(CommunicatingAgent):
         while telling the dispatcher nothing it did not already know.
         """
         weights = PATTERN_WEIGHTS[self.pattern]
-        if self.model.strategy.adapts_weights:
-            self.model.weights = weights
+        # Publish what it has learned on the status board: the demand estimate always,
+        # and the pattern's cost weights when the strategy lets the fleet adapt. Every
+        # car bids with the weights it reads there.
+        self.model.board.publish_policy(
+            self.address,
+            self.model.tick,
+            pattern=self.pattern,
+            weights=weights if self.model.strategy.adapts_weights else None,
+            demand=self.rate,
+        )
         policy = self.recommended_parking()
         advice = (self.pattern, policy)
         if advice == self._last_advice:
