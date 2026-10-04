@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from elevator_mas.config import ScenarioConfig, available_scenarios
+from elevator_mas.learning.cli import learn_app
 from elevator_mas.strategies import STRATEGIES, strategy_names
 
 app = typer.Typer(
@@ -15,6 +16,7 @@ app = typer.Typer(
     no_args_is_help=True,
     help="Multi-Agent Smart Elevator Fleet Coordinator — simulation, dashboard, benchmark.",
 )
+app.add_typer(learn_app, name="learn")
 
 
 @app.command()

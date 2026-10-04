@@ -13,12 +13,12 @@ import numpy as np
 
 from elevator_mas.comms.board import DecisionEvent
 from elevator_mas.config import (
+    ArrivalPhase,
     BuildingConfig,
-    DisturbanceEvent,
+    EventConfig,
     ScenarioConfig,
     TimingConfig,
     TrafficConfig,
-    TrafficPhase,
 )
 from elevator_mas.learning.features import encode_decision
 from elevator_mas.learning.schema import (
@@ -79,33 +79,35 @@ def sample_random_regime(run_id: int, seed: int, teacher_choice: str) -> Scenari
     # Pattern phases (1 to 4 phases)
     n_phases = int(rng.integers(1, 5))
     duration = int(rng.integers(600, 1801))
-    phase_len = duration // n_phases
-    phases: list[TrafficPhase] = []
+    phase_len = max(duration // n_phases, 1)
+    phases: list[ArrivalPhase] = []
 
-    for _p_idx in range(n_phases):
+    curr_until = 0
+    for p_idx in range(n_phases):
         p_name = str(rng.choice(PATTERNS))
+        curr_until = duration if p_idx == n_phases - 1 else (curr_until + phase_len)
         phases.append(
-            TrafficPhase(
-                pattern=p_name,
+            ArrivalPhase(
+                until=curr_until,
+                pattern=p_name,  # type: ignore
                 rate=rate * float(rng.uniform(0.8, 1.2)),
-                duration=phase_len,
             )
         )
 
     prio_prob = 0.05 if rng.random() < 0.3 else 0.0
-    events: list[DisturbanceEvent] = []
+    events: list[EventConfig] = []
 
     if rng.random() < 0.25:
         dist_tick = int(rng.integers(duration // 4, duration * 3 // 4))
         if rng.random() < 0.6:
             c_fault = int(rng.integers(0, cars))
-            events.append(DisturbanceEvent(tick=dist_tick, type="car_fault", car_id=c_fault))
+            events.append(EventConfig(tick=dist_tick, kind="car_fault", car=c_fault))
             repair_tick = dist_tick + int(rng.integers(60, 150))
-            events.append(DisturbanceEvent(tick=repair_tick, type="car_repair", car_id=c_fault))
+            events.append(EventConfig(tick=repair_tick, kind="car_repair", car=c_fault))
         else:
-            events.append(DisturbanceEvent(tick=dist_tick, type="fire_alarm"))
+            events.append(EventConfig(tick=dist_tick, kind="fire_alarm"))
             clear_tick = dist_tick + int(rng.integers(60, 120))
-            events.append(DisturbanceEvent(tick=clear_tick, type="fire_clear"))
+            events.append(EventConfig(tick=clear_tick, kind="fire_clear"))
 
     if teacher_choice == "mixed":
         strat = "full" if rng.random() < 0.5 else "cnp_astar"
@@ -254,3 +256,88 @@ class DecisionRecorder:
         self.shard_index += 1
         self._reset_buffer()
         return out_path
+
+
+def harvest_run(config: ScenarioConfig, recorder: DecisionRecorder) -> int:
+    """Run a single scenario with DecisionRecorder attached, returning decisions recorded."""
+    from elevator_mas.model import ElevatorModel
+
+    model = ElevatorModel(config=config, seed=config.seed)
+    model.decision_hooks.append(recorder)
+    start_count = len(recorder.buf_winner)
+    for _ in range(config.duration):
+        model.step()
+    return len(recorder.buf_winner) - start_count
+
+
+def _worker_harvest(
+    worker_id: int,
+    target_decisions: int,
+    out_dir: Path,
+    teacher: str,
+    seed_start: int,
+    shard_size: int,
+) -> None:
+    recorder = DecisionRecorder(
+        output_dir=out_dir,
+        shard_prefix=f"worker_{worker_id}",
+        shard_capacity=shard_size,
+        teacher=teacher,
+    )
+    total_decisions = 0
+    run_idx = 0
+    while total_decisions < target_decisions:
+        seed = seed_start + run_idx * 100 + worker_id
+        cfg = sample_random_regime(run_id=run_idx, seed=seed, teacher_choice=teacher)
+        decisions = harvest_run(cfg, recorder)
+        total_decisions += decisions
+        run_idx += 1
+    recorder.flush()
+
+
+def record_expert_dataset(
+    target_decisions: int,
+    out_dir: Path | str,
+    workers: int = 1,
+    teacher: str = "mixed",
+    seed_start: int = 0,
+    shard_size: int = 50000,
+) -> list[Path]:
+    """Harvest expert decisions into compressed .npz shards."""
+    import multiprocessing as mp
+
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    if workers <= 1:
+        _worker_harvest(
+            worker_id=0,
+            target_decisions=target_decisions,
+            out_dir=out_path,
+            teacher=teacher,
+            seed_start=seed_start,
+            shard_size=shard_size,
+        )
+    else:
+        decisions_per_worker = (target_decisions + workers - 1) // workers
+        ctx = mp.get_context("spawn")
+        processes = []
+        for w in range(workers):
+            p = ctx.Process(
+                target=_worker_harvest,
+                args=(
+                    w,
+                    decisions_per_worker,
+                    out_path,
+                    teacher,
+                    seed_start,
+                    shard_size,
+                ),
+            )
+            p.start()
+            processes.append(p)
+
+        for p in processes:
+            p.join()
+
+    return sorted(out_path.glob("*.npz"))
