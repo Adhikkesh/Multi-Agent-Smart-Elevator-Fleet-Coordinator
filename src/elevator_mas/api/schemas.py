@@ -51,3 +51,13 @@ class BenchmarkRequest(BaseModel):
     strategies: list[str] | None = None
     seeds: int = Field(default=3, ge=1, le=10)
     ticks: int = Field(default=600, ge=60, le=3600)
+
+
+class RunRequest(BaseModel):
+    """A fast headless run for Compare Mode."""
+
+    scenario: str
+    strategy: str
+    seed: int
+    ticks: int = Field(default=600, ge=60, le=3600)
+    sample_every: int = Field(default=10, ge=1, le=60)

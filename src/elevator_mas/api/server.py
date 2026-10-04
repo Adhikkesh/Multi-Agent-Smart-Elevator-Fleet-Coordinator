@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import subprocess
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -25,12 +27,14 @@ from elevator_mas.api.schemas import (
     InjectRequest,
     PassengerRequest,
     ResetRequest,
+    RunRequest,
     SpeedRequest,
     StepRequest,
 )
 from elevator_mas.api.session import SimulationSession
-from elevator_mas.config import available_scenarios
+from elevator_mas.config import ScenarioConfig, available_scenarios
 from elevator_mas.domain import Direction, HallCall
+from elevator_mas.model import ElevatorModel
 from elevator_mas.optimization import minimax_parking
 from elevator_mas.optimization.local_search import hill_climbing, simulated_annealing
 from elevator_mas.rules import SAFETY_RULES
@@ -424,6 +428,104 @@ def create_app(scenario: str = "demo_story") -> FastAPI:
             "wins": result.wins(),
         }
 
+    # --------------------------------------------------------------------- run
+
+    @app.post("/api/run")
+    async def run_fast(request: RunRequest) -> dict[str, Any]:
+        """Fast headless run for Compare Mode and chart series."""
+        if request.scenario not in available_scenarios():
+            raise HTTPException(status_code=400, detail=f"unknown scenario {request.scenario!r}")
+        if request.strategy not in STRATEGIES:
+            raise HTTPException(status_code=400, detail=f"unknown strategy {request.strategy!r}")
+
+        def _execute() -> dict[str, Any]:
+            config = ScenarioConfig.load(request.scenario)
+            config = config.model_copy(update={"strategy": request.strategy, "seed": request.seed})
+            model = ElevatorModel(config)
+            started = time.perf_counter()
+            violations: list[str] = []
+
+            series: dict[str, list[float | int]] = {
+                "tick": [],
+                "avg_wait": [],
+                "p95_wait": [],
+                "waiting": [],
+                "riding": [],
+                "delivered": [],
+                "energy": [],
+                "long_wait_pct": [],
+                "messages": [],
+            }
+
+            def sample() -> None:
+                m = model.latest_metrics
+                series["tick"].append(model.tick)
+                series["avg_wait"].append(m.avg_wait)
+                series["p95_wait"].append(m.p95_wait)
+                series["waiting"].append(m.waiting)
+                series["riding"].append(m.riding)
+                series["delivered"].append(m.delivered)
+                series["energy"].append(m.energy)
+                series["long_wait_pct"].append(m.long_wait_pct)
+                series["messages"].append(m.messages)
+
+            for _ in range(request.ticks):
+                model.step()
+                violations.extend(model.violations())
+                if model.tick % request.sample_every == 0:
+                    sample()
+
+            if not series["tick"] or series["tick"][-1] != model.tick:
+                sample()
+
+            runtime = time.perf_counter() - started
+            return {
+                "scenario": request.scenario,
+                "strategy": request.strategy,
+                "seed": request.seed,
+                "ticks": model.tick,
+                "runtime_s": round(runtime, 3),
+                "final": model.latest_metrics.as_dict(),
+                "series": series,
+                "rules_fired": sorted({r.rule for r in model.safety.log}),
+                "violations": sorted(set(violations)),
+            }
+
+        return await asyncio.to_thread(_execute)
+
+    @app.get("/api/board")
+    async def get_board() -> dict[str, Any]:
+        """The shared status board (blackboard)."""
+        return session.model.board.as_dict()
+
+    @app.get("/api/version")
+    async def get_version() -> dict[str, Any]:
+        """Application version and optional git SHA."""
+        git_sha = None
+        try:
+            proc = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+                check=False,
+            )
+            if proc.returncode == 0:
+                git_sha = proc.stdout.strip() or None
+        except Exception:
+            pass
+        return {"app": "2.0.0-dev", "git": git_sha}
+
+    @app.get("/api/health")
+    async def health() -> dict[str, Any]:
+        """Liveness probe, also used by the smoke tests."""
+        return {
+            "status": "ok",
+            "tick": session.model.tick,
+            "scenario": session.scenario_name,
+            "strategy": session.model.strategy.name,
+        }
+
     # --------------------------------------------------------------- websocket
 
     @app.websocket("/ws")
@@ -446,27 +548,50 @@ def create_app(scenario: str = "demo_story") -> FastAPI:
 
     # ------------------------------------------------------------------ static
 
+    @app.get("/classic")
+    async def classic() -> FileResponse:
+        """Serve the classic single-page dashboard."""
+        classic_path = WEB_DIR / "index.html"
+        if not classic_path.exists():
+            return JSONResponse({"detail": "classic dashboard not found"}, status_code=404)
+        return FileResponse(classic_path)
+
     @app.get("/")
     async def index() -> FileResponse:
-        """Serve the single-page dashboard."""
-        path = WEB_DIR / "index.html"
-        if not path.exists():
-            return JSONResponse({"detail": "dashboard not built"}, status_code=404)
-        return FileResponse(path)
-
-    @app.get("/api/health")
-    async def health() -> dict[str, Any]:
-        """Liveness probe, also used by the smoke tests."""
-        return {
-            "status": "ok",
-            "tick": session.model.tick,
-            "scenario": session.scenario_name,
-            "strategy": session.model.strategy.name,
-        }
+        """Serve the React dashboard if built, else fallback to classic."""
+        dist_index = WEB_DIR / "dist" / "index.html"
+        if dist_index.exists():
+            return FileResponse(dist_index)
+        classic_index = WEB_DIR / "index.html"
+        if classic_index.exists():
+            return FileResponse(classic_index)
+        return JSONResponse({"detail": "dashboard not built"}, status_code=404)
 
     static_dir = WEB_DIR / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    dist_assets = WEB_DIR / "dist" / "assets"
+    dist_assets.mkdir(parents=True, exist_ok=True)
+    app.mount("/assets", StaticFiles(directory=dist_assets), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str) -> FileResponse:
+        """SPA fallback: serve index.html for client-side deep links."""
+        if (
+            full_path.startswith("api/")
+            or full_path.startswith("ws")
+            or full_path.startswith("static/")
+            or full_path.startswith("assets/")
+        ):
+            raise HTTPException(status_code=404, detail="Not Found")
+        dist_index = WEB_DIR / "dist" / "index.html"
+        if dist_index.exists():
+            return FileResponse(dist_index)
+        classic_index = WEB_DIR / "index.html"
+        if classic_index.exists():
+            return FileResponse(classic_index)
+        raise HTTPException(status_code=404, detail="Not Found")
 
     return app
 

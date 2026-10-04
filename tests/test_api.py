@@ -278,3 +278,120 @@ class TestStrictJson:
         frame = json.loads(text, parse_constant=reject)
         assert frame["tick"] == 150
         assert any(m["performative"] == "REQUEST" for m in frame["messages"]) or frame["messages"]
+
+
+class TestPhase2Additions:
+    """New endpoints and routing added for Phase 2."""
+
+    def test_classic_dashboard_served(self, client) -> None:
+        """GET /classic serves the original single-page HTML."""
+        response = client.get("/classic")
+        assert response.status_code == 200
+        assert "<!DOCTYPE html>" in response.text
+        assert "Smart Elevator Fleet Coordinator" in response.text
+
+    def test_spa_fallback_and_deep_links(self, client) -> None:
+        """Deep links like /lab and /agents return the dashboard page."""
+        for path in ("/lab", "/agents", "/experiments", "/theory", "/story"):
+            response = client.get(path)
+            assert response.status_code == 200
+            assert "<!DOCTYPE html>" in response.text
+
+    def test_spa_fallback_does_not_mask_api_or_static_404s(self, client) -> None:
+        """Nonexistent API and static paths return 404."""
+        assert client.get("/api/unknown_endpoint").status_code == 404
+        assert client.get("/static/unknown_file.js").status_code == 404
+
+    def test_board_endpoint(self, client) -> None:
+        """GET /api/board returns the public status blackboard."""
+        import json
+
+        def reject(constant: str) -> None:
+            raise ValueError(f"non-strict JSON constant {constant}")
+
+        response = client.get("/api/board")
+        assert response.status_code == 200
+        payload = json.loads(response.text, parse_constant=reject)
+        assert "cars" in payload
+        assert "policy" in payload
+        assert "writes" in payload
+        assert isinstance(payload["cars"], list)
+        assert len(payload["cars"]) == 4
+
+    def test_version_endpoint(self, client) -> None:
+        """GET /api/version returns version info."""
+        response = client.get("/api/version")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["app"] == "2.0.0-dev"
+        assert "git" in data
+
+    def test_run_endpoint_success_and_determinism(self, client) -> None:
+        """POST /api/run performs a fast headless run and returns metrics and series."""
+        import json
+
+        def reject(constant: str) -> None:
+            raise ValueError(f"non-strict JSON constant {constant}")
+
+        body = {
+            "scenario": "interfloor_light",
+            "strategy": "collective",
+            "seed": 42,
+            "ticks": 60,
+            "sample_every": 10,
+        }
+        res1 = client.post("/api/run", json=body)
+        assert res1.status_code == 200
+        data1 = json.loads(res1.text, parse_constant=reject)
+
+        assert data1["scenario"] == "interfloor_light"
+        assert data1["strategy"] == "collective"
+        assert data1["seed"] == 42
+        assert data1["ticks"] == 60
+        assert "runtime_s" in data1
+        assert "final" in data1
+        assert "series" in data1
+        assert "rules_fired" in data1
+        assert "violations" in data1
+
+        series = data1["series"]
+        for key in (
+            "tick",
+            "avg_wait",
+            "p95_wait",
+            "waiting",
+            "riding",
+            "delivered",
+            "energy",
+            "long_wait_pct",
+            "messages",
+        ):
+            assert key in series
+            assert len(series[key]) >= 6
+
+        # Determinism check (metrics other than wall-clock compute time must match exactly)
+        res2 = client.post("/api/run", json=body)
+        assert res2.status_code == 200
+        data2 = json.loads(res2.text, parse_constant=reject)
+        f1 = {k: v for k, v in data1["final"].items() if k != "compute_ms_per_tick"}
+        f2 = {k: v for k, v in data2["final"].items() if k != "compute_ms_per_tick"}
+        assert f1 == f2
+        assert data1["series"] == data2["series"]
+
+    def test_run_endpoint_validation(self, client) -> None:
+        """Validation errors on unknown scenario/strategy and out-of-range bounds."""
+        res_bad_scenario = client.post(
+            "/api/run", json={"scenario": "nonexistent", "strategy": "collective", "seed": 1}
+        )
+        assert res_bad_scenario.status_code == 400
+
+        res_bad_strategy = client.post(
+            "/api/run", json={"scenario": "interfloor_light", "strategy": "bad_strat", "seed": 1}
+        )
+        assert res_bad_strategy.status_code == 400
+
+        res_bad_ticks = client.post(
+            "/api/run",
+            json={"scenario": "interfloor_light", "strategy": "collective", "seed": 1, "ticks": 10},
+        )
+        assert res_bad_ticks.status_code == 422
