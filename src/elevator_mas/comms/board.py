@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from elevator_mas.config import CostWeights
-from elevator_mas.domain import Direction, HallCall
+from elevator_mas.domain import Bid, Direction, HallCall
 
 
 @dataclass(frozen=True)
@@ -92,6 +92,34 @@ class FleetPolicy:
     demand: dict[int, float] = field(default_factory=dict)
     published_by: str = "config"
     tick: int = 0
+
+
+def copy_policy(policy: FleetPolicy) -> FleetPolicy:
+    """Create a shallow copy of FleetPolicy with an isolated demand dictionary."""
+    return FleetPolicy(
+        pattern=policy.pattern,
+        weights=policy.weights.model_copy() if hasattr(policy.weights, "model_copy") else policy.weights,
+        demand=dict(policy.demand),
+        published_by=policy.published_by,
+        tick=policy.tick,
+    )
+
+
+@dataclass(frozen=True)
+class DecisionEvent:
+    """Snapshot of a single auction decision emitted to observer hooks."""
+
+    tick: int
+    call: HallCall
+    urgency: int
+    waiting: int
+    statuses: tuple[CarStatus, ...]
+    policy: FleetPolicy
+    bids: tuple[Bid, ...]
+    winner: int | None
+    building: Any
+    seed: int
+
 
 
 class StatusBoard:

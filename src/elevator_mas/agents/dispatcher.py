@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from elevator_mas.agents.base import CommunicatingAgent
-from elevator_mas.comms import Message, Order, Performative
+from elevator_mas.comms import DecisionEvent, Message, Order, Performative, copy_policy
 from elevator_mas.domain import AuctionRound, Bid, Direction, HallCall
 from elevator_mas.optimization import (
     MinimaxResult,
@@ -78,6 +78,7 @@ class DispatcherAgent(CommunicatingAgent):
         self.unassigned: dict[HallCall, dict[str, Any]] = {}
         self._mailbox: list[Message] = []
         self._open_round: tuple[HallCall, dict[str, Any]] | None = None
+        self._round_view: tuple[tuple[Any, ...], Any] | None = None
         self._moved_this_tick: dict[HallCall, tuple[int | None, int]] = {}
 
     # ------------------------------------------------------------------ sensing
@@ -199,6 +200,7 @@ class DispatcherAgent(CommunicatingAgent):
         call, record = next(iter(self.pending_calls.items()))
         self.pending_calls.pop(call)
         self._open_round = (call, record)
+        self._round_view = (tuple(self.model.board.cars()), copy_policy(self.model.board.policy))
         self.send(
             Performative.CFP,
             None,  # broadcast to every car
@@ -217,6 +219,8 @@ class DispatcherAgent(CommunicatingAgent):
             return
         call, record = self._open_round
         self._open_round = None
+        round_view = self._round_view
+        self._round_view = None
         conversation_id = record["conversation_id"]
         replies = self._take_mail(
             lambda m: (
@@ -273,6 +277,24 @@ class DispatcherAgent(CommunicatingAgent):
         if len(self.auction_history) > 50:
             del self.auction_history[:-50]
         self.model.collector.total_calls += 1
+
+        if self.model.decision_hooks and round_view is not None:
+            view_cars, view_policy = round_view
+            event = DecisionEvent(
+                tick=self.model.tick,
+                call=call,
+                urgency=record["urgency"],
+                waiting=record["waiting"],
+                statuses=view_cars,
+                policy=view_policy,
+                bids=tuple(bids),
+                winner=winner.car_id if viable else None,
+                building=self.model.config.building,
+                seed=self.model.seed_value,
+            )
+            for hook in self.model.decision_hooks:
+                hook(event)
+
 
     # ------------------------------------------ periodic global reassignment (SA)
 

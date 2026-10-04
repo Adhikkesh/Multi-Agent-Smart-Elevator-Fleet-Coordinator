@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import itertools
 import time
+from collections.abc import Callable
 from typing import Any
 
 from mesa import Model
@@ -34,7 +35,7 @@ from elevator_mas.agents import (
     SafetyAgent,
     TrafficMonitorAgent,
 )
-from elevator_mas.comms import MessageBus, StatusBoard
+from elevator_mas.comms import DecisionEvent, MessageBus, StatusBoard
 from elevator_mas.config import CostWeights, ScenarioConfig
 from elevator_mas.domain import CarState, Direction
 from elevator_mas.metrics import Metrics, MetricsCollector
@@ -76,6 +77,8 @@ class ElevatorModel(Model):
         self.bus = MessageBus()
         #: The public blackboard: cars publish their status, the monitor its policy.
         self.board = StatusBoard(config.weights)
+        #: Observer hooks for learning environments and decision recorders.
+        self.decision_hooks: list[Callable[[DecisionEvent], None]] = []
         self.negotiation_rounds: int = 0
         self.collector = MetricsCollector(long_wait_threshold=config.fairness.long_wait_threshold)
         self.generator = ArrivalGenerator(config, self.random)
