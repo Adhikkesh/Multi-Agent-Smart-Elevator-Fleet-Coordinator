@@ -331,6 +331,19 @@ def harvest_run(config: ScenarioConfig, recorder: DecisionRecorder) -> int:
     return recorder.recorded_total - before
 
 
+def split_seed_range(seed_start: int) -> tuple[int, int]:
+    """The [start, end) run-seed range of the split that ``seed_start`` falls in.
+
+    Train 0-7999, val 8000-8499, test 8500-9999. Harvesting never crosses a boundary, so a
+    large training harvest can never leak into validation or test seeds.
+    """
+    if seed_start < 8000:
+        return seed_start, 8000
+    if seed_start < 8500:
+        return seed_start, 8500
+    return seed_start, 10000
+
+
 def _worker_harvest(
     worker_id: int,
     target_decisions: int,
@@ -338,6 +351,7 @@ def _worker_harvest(
     teacher: str,
     seed_start: int,
     shard_size: int,
+    workers: int = 1,
 ) -> None:
     recorder = DecisionRecorder(
         output_dir=out_dir,
@@ -345,13 +359,15 @@ def _worker_harvest(
         shard_capacity=shard_size,
         teacher=teacher,
     )
-    total_decisions = 0
+    _, seed_end = split_seed_range(seed_start)
     run_idx = 0
-    while total_decisions < target_decisions:
-        seed = seed_start + run_idx * 100 + worker_id
+    while recorder.recorded_total < target_decisions:
+        # Dense, interleaved seeds: worker w takes seed_start + w, + w + workers, ...
+        seed = seed_start + run_idx * workers + worker_id
+        if seed >= seed_end:
+            break
         cfg = sample_random_regime(run_id=run_idx, seed=seed, teacher_choice=teacher)
-        decisions = harvest_run(cfg, recorder)
-        total_decisions += decisions
+        harvest_run(cfg, recorder)
         run_idx += 1
     recorder.flush()
 
@@ -364,21 +380,18 @@ def record_expert_dataset(
     seed_start: int = 0,
     shard_size: int = 50000,
 ) -> list[Path]:
-    """Harvest expert decisions into compressed .npz shards."""
+    """Harvest expert decisions into compressed .npz shards.
+
+    Runs are drawn from ``seed_start`` upwards without leaving that seed's split (see
+    :func:`split_seed_range`), so ``seed_start=8000`` records validation data only.
+    """
     import multiprocessing as mp
 
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
     if workers <= 1:
-        _worker_harvest(
-            worker_id=0,
-            target_decisions=target_decisions,
-            out_dir=out_path,
-            teacher=teacher,
-            seed_start=seed_start,
-            shard_size=shard_size,
-        )
+        _worker_harvest(0, target_decisions, out_path, teacher, seed_start, shard_size, 1)
     else:
         decisions_per_worker = (target_decisions + workers - 1) // workers
         ctx = mp.get_context("spawn")
@@ -386,19 +399,15 @@ def record_expert_dataset(
         for w in range(workers):
             p = ctx.Process(
                 target=_worker_harvest,
-                args=(
-                    w,
-                    decisions_per_worker,
-                    out_path,
-                    teacher,
-                    seed_start,
-                    shard_size,
-                ),
+                args=(w, decisions_per_worker, out_path, teacher, seed_start, shard_size, workers),
             )
             p.start()
             processes.append(p)
 
         for p in processes:
             p.join()
+        failed = [p.exitcode for p in processes if p.exitcode != 0]
+        if failed:
+            raise RuntimeError(f"{len(failed)} harvest worker(s) failed: exit codes {failed}")
 
     return sorted(out_path.glob("*.npz"))
