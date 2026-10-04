@@ -295,7 +295,7 @@ class TestPhase2Additions:
         for path in ("/lab", "/agents", "/experiments", "/theory", "/story"):
             response = client.get(path)
             assert response.status_code == 200
-            assert "<!DOCTYPE html>" in response.text
+            assert "<!doctype html>" in response.text.lower()
 
     def test_spa_fallback_does_not_mask_api_or_static_404s(self, client) -> None:
         """Nonexistent API and static paths return 404."""

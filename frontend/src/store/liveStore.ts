@@ -51,7 +51,7 @@ export const useLiveStore = create<LiveState>((set) => ({
       }
 
       // 3. Auction history ring buffer (dedup by conversation_id)
-      let newAuctionHistory = [...state.auctionHistory];
+      const newAuctionHistory = [...state.auctionHistory];
       if (nextSnapshot.auction) {
         const existingIdx = newAuctionHistory.findIndex(
           (a) => a.conversation_id === nextSnapshot.auction!.conversation_id,

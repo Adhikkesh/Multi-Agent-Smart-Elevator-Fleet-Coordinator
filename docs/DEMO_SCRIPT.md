@@ -7,10 +7,16 @@ uv sync                                    # once, beforehand
 uv run elevator serve                      # → http://localhost:8000
 ```
 
-Open the browser **full screen**. The server starts **paused** on `demo_story`, so the
-building is still and you can talk over it. Everything works offline.
+Open the browser **full screen**. You can present either via **Guided Story Mode** (`/story`) or the **Free-Form Mission Control** dashboard:
 
-The scenario is scripted, so the beats land at the same ticks every time (seed 7):
+### Option A: Guided Story Mode (`/story`)
+Navigate to `http://localhost:8000/story` or press `G` from anywhere:
+- Full-screen presentation deck that syncs 10 structured acts with live simulation actions.
+- Use `→` (Next Beat) and `←` (Previous Beat), or click **Execute Real Action** buttons to inject scripted rushes, car breakdowns, and fire evacuations.
+- Press `Esc` to return to Mission Control.
+
+### Option B: Free-Form Mission Control (`/`)
+The scenario is scripted on `demo_story`, so the beats land at the same ticks every time (seed 7):
 
 | Tick | Event |
 | --- | --- |
