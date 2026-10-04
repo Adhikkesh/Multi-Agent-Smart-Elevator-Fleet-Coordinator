@@ -6,21 +6,15 @@ Records expert teacher decisions from real Mesa simulation runs into compressed 
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
 from elevator_mas.comms.board import DecisionEvent
 from elevator_mas.config import (
     BuildingConfig,
-    CostWeights,
     DisturbanceEvent,
-    FairnessConfig,
-    PlannerConfig,
     ScenarioConfig,
     TimingConfig,
     TrafficConfig,
@@ -29,15 +23,11 @@ from elevator_mas.config import (
 from elevator_mas.learning.features import encode_decision
 from elevator_mas.learning.schema import (
     FEATURE_VERSION,
-    KC,
-    KCAR,
-    KG,
     MAX_CARS,
     PATTERNS,
     SCHEMA_HASH,
 )
 from elevator_mas.learning.view import from_event
-from elevator_mas.model import ElevatorModel
 
 
 def get_git_sha() -> str:
@@ -92,7 +82,7 @@ def sample_random_regime(run_id: int, seed: int, teacher_choice: str) -> Scenari
     phase_len = duration // n_phases
     phases: list[TrafficPhase] = []
 
-    for p_idx in range(n_phases):
+    for _p_idx in range(n_phases):
         p_name = str(rng.choice(PATTERNS))
         phases.append(
             TrafficPhase(
@@ -110,10 +100,12 @@ def sample_random_regime(run_id: int, seed: int, teacher_choice: str) -> Scenari
         if rng.random() < 0.6:
             c_fault = int(rng.integers(0, cars))
             events.append(DisturbanceEvent(tick=dist_tick, type="car_fault", car_id=c_fault))
-            events.append(DisturbanceEvent(tick=dist_tick + int(rng.integers(60, 150)), type="car_repair", car_id=c_fault))
+            repair_tick = dist_tick + int(rng.integers(60, 150))
+            events.append(DisturbanceEvent(tick=repair_tick, type="car_repair", car_id=c_fault))
         else:
             events.append(DisturbanceEvent(tick=dist_tick, type="fire_alarm"))
-            events.append(DisturbanceEvent(tick=dist_tick + int(rng.integers(60, 120)), type="fire_clear"))
+            clear_tick = dist_tick + int(rng.integers(60, 120))
+            events.append(DisturbanceEvent(tick=clear_tick, type="fire_clear"))
 
     if teacher_choice == "mixed":
         strat = "full" if rng.random() < 0.5 else "cnp_astar"

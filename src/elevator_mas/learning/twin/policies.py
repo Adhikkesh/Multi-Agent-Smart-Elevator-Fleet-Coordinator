@@ -136,7 +136,11 @@ class CostGreedyPolicy:
             on_route = cars[i, :, 23]
 
             # Approximate wait term
-            est_wait = np.where(on_route > 0.5, dist_to_call * 2.0, plan_end_eta + dist_to_call * 2.0)
+            est_wait = np.where(
+                on_route > 0.5,
+                dist_to_call * 2.0,
+                plan_end_eta + dist_to_call * 2.0,
+            )
             ride_term = load_ratio * 10.0
             crowding_term = load_ratio * 10.0
             energy_term = dist_to_call * 0.5 + 1.0

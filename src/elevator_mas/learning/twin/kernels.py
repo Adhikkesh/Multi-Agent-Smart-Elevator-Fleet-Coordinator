@@ -4,10 +4,11 @@ If numba is available and ELEVATOR_NO_NUMBA != "1", kernels run with @njit.
 Otherwise, the exact same Python functions run in pure Python.
 """
 
-from __future__ import annotations
-
 import os
-from typing import Final
+from collections.abc import Callable
+from typing import Any
+
+import numpy as np
 
 USE_NUMBA: bool = os.environ.get("ELEVATOR_NO_NUMBA", "0") != "1"
 if USE_NUMBA:
@@ -18,16 +19,13 @@ if USE_NUMBA:
 
 if not USE_NUMBA:
 
-    def njit(*args, **kwargs):  # type: ignore
-        def decorator(func):  # type: ignore
+    def njit(*args: Any, **_kwargs: Any) -> Callable[..., Any]:  # type: ignore
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             return func
 
         if len(args) == 1 and callable(args[0]):
             return args[0]
         return decorator
-
-
-import numpy as np
 
 
 @njit(cache=True, fastmath=False)
@@ -73,21 +71,20 @@ def look_route(
             res[idx] = s
             idx += 1
         return res
-    else:
-        downs = [stops[i] for i in range(n) if stops[i] <= current_floor]
-        ups = [stops[i] for i in range(n) if stops[i] > current_floor]
-        downs.sort()
-        downs.reverse()
-        ups.sort()
-        res = np.empty(n, dtype=np.int32)
-        idx = 0
-        for s in downs:
-            res[idx] = s
-            idx += 1
-        for s in ups:
-            res[idx] = s
-            idx += 1
-        return res
+    downs = [stops[i] for i in range(n) if stops[i] <= current_floor]
+    ups = [stops[i] for i in range(n) if stops[i] > current_floor]
+    downs.sort()
+    downs.reverse()
+    ups.sort()
+    res = np.empty(n, dtype=np.int32)
+    idx = 0
+    for s in downs:
+        res[idx] = s
+        idx += 1
+    for s in ups:
+        res[idx] = s
+        idx += 1
+    return res
 
 
 @njit(cache=True, fastmath=False)
@@ -115,4 +112,3 @@ def route_eta(
         elapsed += dwell
 
     return end_floor, elapsed
-

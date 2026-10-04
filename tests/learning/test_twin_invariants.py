@@ -44,7 +44,8 @@ def test_twin_conservation_and_physical_invariants(seed: int, pattern: str) -> N
     delivered = len(sim.delivered_passengers)
 
     assert arrived == waiting + riding + delivered, (
-        f"Conservation broken: arrived ({arrived}) != waiting ({waiting}) + riding ({riding}) + delivered ({delivered})"
+        f"Conservation broken: arrived ({arrived}) != "
+        f"waiting ({waiting}) + riding ({riding}) + delivered ({delivered})"
     )
 
 
@@ -95,7 +96,12 @@ def test_twin_drain_delivers_everyone() -> None:
         ctx, term = sim.step_action(int(act))
 
     # Run remaining ticks to let all aboard alight
-    while (sum(len(q) for q in sim.waiting.values()) > 0 or sum(len(c.riders) for c in sim.cars) > 0) and sim.tick < 2000:
+    def _still_active() -> bool:
+        has_waiting = sum(len(q) for q in sim.waiting.values()) > 0
+        has_riding = sum(len(c.riders) for c in sim.cars) > 0
+        return has_waiting or has_riding
+
+    while _still_active() and sim.tick < 2000:
         sim._step_tick()
 
     assert len(sim.delivered_passengers) == len(sim.all_passengers)

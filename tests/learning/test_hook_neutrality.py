@@ -10,7 +10,6 @@ import pytest
 
 from elevator_mas.config import ScenarioConfig
 from elevator_mas.model import ElevatorModel
-from elevator_mas.sim import run_scenario
 
 
 @pytest.mark.parametrize("scenario_name", ["morning_up_peak", "evening_down_peak", "lunch_two_way"])
@@ -55,4 +54,3 @@ def test_hook_neutrality(scenario_name: str, strategy: str, seed: int) -> None:
     assert msgs_with_hook == msgs_no_hook
     # Ensure hook actually fired during the run (calls were auctioned)
     assert len(hook_calls) > 0
-

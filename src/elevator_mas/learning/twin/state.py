@@ -12,7 +12,6 @@ from typing import Any
 import numpy as np
 
 from elevator_mas.config import ScenarioConfig
-from elevator_mas.learning.schema import MAX_CARS
 from elevator_mas.learning.twin.kernels import look_route, route_eta
 from elevator_mas.learning.twin.traffic import TwinTrafficGenerator
 from elevator_mas.learning.view import DecisionContext, FleetView
@@ -146,14 +145,12 @@ class TwinSimulator:
         self.hall_calls_blocked = False
 
         self.cars = [TwinCar(car_id=i, floor=self.lobby) for i in range(self.n_cars)]
-        self.waiting = {
-            (f, d): [] for f in range(self.floors) for d in (1, -1)
-        }
+        self.waiting = {(f, d): [] for f in range(self.floors) for d in (1, -1)}
         self.unassigned_calls = []
         self.call_first_tick = {}
         self.delivered_passengers = []
         self.all_passengers = []
-        self.ewma_demand = {f: 0.0 for f in range(self.floors)}
+        self.ewma_demand = dict.fromkeys(range(self.floors), 0.0)
 
     def current_rate(self) -> float:
         if self.scenario_config is not None:
@@ -210,7 +207,7 @@ class TwinSimulator:
 
         # EWMA demand update (alpha=0.02)
         alpha = 0.02
-        floor_counts = {f: 0 for f in range(self.floors)}
+        floor_counts = dict.fromkeys(range(self.floors), 0)
         for orig, dest, weight, prio in arrivals:
             floor_counts[orig] += 1
             direction = 1 if dest > orig else -1
@@ -388,10 +385,7 @@ class TwinSimulator:
     def _should_serve_floor(self, car: TwinCar, floor: int) -> bool:
         if floor in car.car_calls:
             return True
-        for (c_fl, c_dir) in car.assigned_calls:
-            if c_fl == floor:
-                return True
-        return False
+        return any(c_fl == floor for c_fl, _ in car.assigned_calls)
 
     def _begin_door_cycle(self, car: TwinCar) -> None:
         car.door_state = 1  # OPENING

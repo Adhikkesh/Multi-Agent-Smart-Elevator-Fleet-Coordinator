@@ -98,7 +98,9 @@ def copy_policy(policy: FleetPolicy) -> FleetPolicy:
     """Create a shallow copy of FleetPolicy with an isolated demand dictionary."""
     return FleetPolicy(
         pattern=policy.pattern,
-        weights=policy.weights.model_copy() if hasattr(policy.weights, "model_copy") else policy.weights,
+        weights=(
+            policy.weights.model_copy() if hasattr(policy.weights, "model_copy") else policy.weights
+        ),
         demand=dict(policy.demand),
         published_by=policy.published_by,
         tick=policy.tick,
@@ -119,7 +121,6 @@ class DecisionEvent:
     winner: int | None
     building: Any
     seed: int
-
 
 
 class StatusBoard:

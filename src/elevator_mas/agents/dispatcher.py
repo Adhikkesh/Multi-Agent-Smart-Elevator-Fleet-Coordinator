@@ -295,7 +295,6 @@ class DispatcherAgent(CommunicatingAgent):
             for hook in self.model.decision_hooks:
                 hook(event)
 
-
     # ------------------------------------------ periodic global reassignment (SA)
 
     def decide(self) -> None:

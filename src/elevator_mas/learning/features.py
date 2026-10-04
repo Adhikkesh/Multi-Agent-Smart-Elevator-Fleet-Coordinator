@@ -70,7 +70,7 @@ def encode_decision(ctx: DecisionContext) -> Encoded:
     call_arr[12] = np.clip(float(ctx.open_calls_count) / 20.0, 0.0, 1.0)
     call_arr[13] = np.clip(float(ctx.fleet.n_cars) / float(MAX_CARS), 0.0, 1.0)
 
-    # ------------------------------------------------------------- 2. Car tokens [MAX_CARS, KCAR=26]
+    # -------------------------------------------------------- 2. Car tokens [MAX_CARS, KCAR=26]
     cars_arr = np.zeros((MAX_CARS, KCAR), dtype=np.float32)
     mask = np.zeros(MAX_CARS, dtype=bool)
     eligible = np.zeros(MAX_CARS, dtype=bool)
@@ -148,13 +148,9 @@ def encode_decision(ctx: DecisionContext) -> Encoded:
             cars_arr[i, 22] = 0.0
 
         # 23. Call on route (free pickup on current sweep)
-        on_route = False
-        if c_dir > 0 and ctx.call_direction > 0:
-            if c_floor <= ctx.call_floor <= end_fl:
-                on_route = True
-        elif c_dir < 0 and ctx.call_direction < 0:
-            if end_fl <= ctx.call_floor <= c_floor:
-                on_route = True
+        on_route = (
+            c_dir > 0 and ctx.call_direction > 0 and c_floor <= ctx.call_floor <= end_fl
+        ) or (c_dir < 0 and ctx.call_direction < 0 and end_fl <= ctx.call_floor <= c_floor)
         cars_arr[i, 23] = 1.0 if on_route else 0.0
 
         # 24. Has same call

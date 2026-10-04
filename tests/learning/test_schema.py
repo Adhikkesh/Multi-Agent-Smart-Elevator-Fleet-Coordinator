@@ -37,4 +37,4 @@ def test_patterns_one_hot() -> None:
 
 def test_schema_hash_stability() -> None:
     assert len(SCHEMA_HASH) == 16
-    assert SCHEMA_HASH == get_schema_hash()
+    assert get_schema_hash() == SCHEMA_HASH

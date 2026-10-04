@@ -193,9 +193,10 @@ def from_board(
     """Build DecisionContext directly from board state."""
     from elevator_mas.domain import HallCall
 
+    h_dir = Direction.UP if call_direction > 0 else Direction.DOWN
     evt = DecisionEvent(
         tick=tick,
-        call=HallCall(floor=call_floor, direction=Direction.UP if call_direction > 0 else Direction.DOWN),
+        call=HallCall(floor=call_floor, direction=h_dir),
         urgency=call_urgency,
         waiting=call_waiting,
         statuses=tuple(cars),

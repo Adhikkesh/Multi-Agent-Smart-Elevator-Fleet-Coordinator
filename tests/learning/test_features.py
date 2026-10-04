@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from elevator_mas.comms.board import CarStatus, DecisionEvent, FleetPolicy
-from elevator_mas.config import BuildingConfig, CostWeights
-from elevator_mas.domain import Bid, Direction, HallCall
-from elevator_mas.learning.features import encode_batch, encode_decision
+from elevator_mas.config import BuildingConfig
+from elevator_mas.domain import Direction, HallCall
+from elevator_mas.learning.features import encode_decision
 from elevator_mas.learning.schema import KC, KCAR, KG, MAX_CARS
 from elevator_mas.learning.view import DecisionContext, FleetView, from_event
 
@@ -365,7 +365,9 @@ def test_parity_real_event_vs_fleet_view() -> None:
     call_floor=st.integers(min_value=0, max_value=39),
     call_dir=st.sampled_from([-1, 1]),
 )
-def test_hypothesis_feature_bounds(floors: int, n_cars: int, call_floor: int, call_dir: int) -> None:
+def test_hypothesis_feature_bounds(
+    floors: int, n_cars: int, call_floor: int, call_dir: int
+) -> None:
     c_fl = min(call_floor, floors - 1)
     ctx = make_dummy_context(n_cars=n_cars, floors=floors, call_floor=c_fl, call_dir=call_dir)
     enc = encode_decision(ctx)
