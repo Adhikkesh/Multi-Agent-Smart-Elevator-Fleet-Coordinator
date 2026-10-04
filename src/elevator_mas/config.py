@@ -128,6 +128,21 @@ class EventConfig(BaseModel):
     count: int = Field(default=10, ge=1)
 
 
+class LiftConfig(BaseModel):
+    """Runtime options of the LiftZero learned bidder (ignored by classical strategies)."""
+
+    #: "shared": one forward pass per CFP; "per_car": every car runs the network itself.
+    inference: Literal["shared", "per_car"] = "shared"
+    #: Also compute each car's classical bid and attach it to the PROPOSE (DAgger labels,
+    #: agreement statistics). Never used for the award unless `beta` says so.
+    shadow_teacher: bool = False
+    #: DAgger mixing: probability that an auction is awarded by the shadow teacher's bids
+    #: instead of the learned ones. Requires `shadow_teacher`.
+    beta: float = Field(default=0.0, ge=0.0, le=1.0)
+    #: Override of the strategy's ONNX model path.
+    model_path: str | None = None
+
+
 class ScenarioConfig(BaseModel):
     """One complete, reproducible experiment."""
 
@@ -144,6 +159,7 @@ class ScenarioConfig(BaseModel):
     traffic: TrafficConfig = Field(default_factory=TrafficConfig)
     events: list[EventConfig] = Field(default_factory=list)
     expected: dict[str, float] = Field(default_factory=dict)
+    lift: LiftConfig = Field(default_factory=LiftConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> ScenarioConfig:

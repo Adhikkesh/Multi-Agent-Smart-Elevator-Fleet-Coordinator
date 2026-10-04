@@ -46,7 +46,8 @@ class TestStateEndpoints:
         """PEAS, environment classification, rules and strategies."""
         payload = client.get("/api/meta").json()
         assert len(payload["scenarios"]) == 9
-        assert len(payload["strategies"]) == 4
+        assert len(payload["strategies"]) == 6
+        assert [s["bidder"] for s in payload["strategies"]].count("learned") == 2
         assert len(payload["agents"]) == 6
         assert len(payload["environment"]) == 7
         assert len(payload["rules"]) == 7

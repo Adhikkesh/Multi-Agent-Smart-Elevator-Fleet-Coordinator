@@ -77,6 +77,20 @@ class ElevatorModel(Model):
         self.bus = MessageBus()
         #: The public blackboard: cars publish their status, the monitor its policy.
         self.board = StatusBoard(config.weights)
+        #: The LiftZero network bidder, present only for strategies with bidder="learned".
+        self.learned_bidder: Any = None
+        #: Independent seeded stream for DAgger award mixing, spawned from `self.rng` so
+        #: drawing from it never shifts the passenger-arrival stream.
+        self.dagger_rng: Any = None
+        if self.strategy.uses_learned_bidder:
+            from elevator_mas.learning.lift.bidder import LearnedBidder
+
+            self.learned_bidder = LearnedBidder(
+                self,
+                model_path=config.lift.model_path or self.strategy.model_path,
+                inference=config.lift.inference,
+            )
+            self.dagger_rng = self.rng.spawn(1)[0]
         #: Observer hooks for learning environments and decision recorders.
         self.decision_hooks: list[Callable[[DecisionEvent], None]] = []
         self.negotiation_rounds: int = 0

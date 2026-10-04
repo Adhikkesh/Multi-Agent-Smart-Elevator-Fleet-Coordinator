@@ -32,6 +32,13 @@ class DispatchStrategy:
     parking_policy: str | None = None
     #: Whether the TrafficMonitorAgent is allowed to retune the cost weights.
     adapts_weights: bool = False
+    #: Who computes a car's Contract Net bid: "classical" (the rule named by `assignment`)
+    #: or "learned" (the LiftZero network; eligibility stays classical).
+    bidder: str = "classical"
+    #: ONNX model of a learned bidder (repo-relative); None = the default LiftZero model.
+    model_path: str | None = None
+    #: The classical strategy a learned one imitates (its shadow teacher / DAgger labeller).
+    teacher: str | None = None
 
     @property
     def uses_reassignment(self) -> bool:
@@ -42,6 +49,11 @@ class DispatchStrategy:
     def uses_smart_parking(self) -> bool:
         """Whether idle cars are repositioned at all."""
         return self.parking_policy is not None
+
+    @property
+    def uses_learned_bidder(self) -> bool:
+        """Whether cars bid with the LiftZero network."""
+        return self.bidder == "learned"
 
     @property
     def uses_auction(self) -> bool:
@@ -59,6 +71,9 @@ class DispatchStrategy:
             "reassignment": self.reassignment,
             "parking_policy": self.parking_policy,
             "adapts_weights": self.adapts_weights,
+            "bidder": self.bidder,
+            "teacher": self.teacher,
+            "learning": self.uses_learned_bidder,
         }
 
 
@@ -142,5 +157,41 @@ register_strategy(
         reassignment="simulated_annealing",
         parking_policy="hill_climb",
         adapts_weights=True,
+    )
+)
+
+register_strategy(
+    DispatchStrategy(
+        name="liftzero_bc",
+        label="LiftZero (imitation)",
+        description=(
+            "Contract Net where each car's bid is computed by the LiftZero network "
+            "(a set-Transformer trained by imitating the A* bidder, with DAgger). "
+            "Everything else equals the 'full' strategy, so the bidder is the only "
+            "difference."
+        ),
+        assignment="cnp",
+        routing="astar",
+        reassignment="simulated_annealing",
+        parking_policy="hill_climb",
+        adapts_weights=True,
+        bidder="learned",
+        teacher="full",
+    )
+)
+
+register_strategy(
+    DispatchStrategy(
+        name="liftzero_bc_cnp",
+        label="LiftZero (imitation, bare CNP)",
+        description=(
+            "The LiftZero learned bidder inside plain Contract Net + A* routing, with no "
+            "reassignment, parking or adaptive weights: equals 'cnp_astar' except the "
+            "bidder, isolating the network's effect from the extras."
+        ),
+        assignment="cnp",
+        routing="astar",
+        bidder="learned",
+        teacher="cnp_astar",
     )
 )

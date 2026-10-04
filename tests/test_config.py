@@ -73,9 +73,16 @@ class TestConfig:
 class TestStrategies:
     """The registry."""
 
-    def test_all_four_strategies_are_registered(self) -> None:
-        """The comparison ladder from the specification."""
-        assert strategy_names() == ["nearest_car", "collective", "cnp_astar", "full"]
+    def test_the_strategy_ladder_is_registered(self) -> None:
+        """The classical comparison ladder from the specification, then the learned bidders."""
+        assert strategy_names() == [
+            "nearest_car",
+            "collective",
+            "cnp_astar",
+            "full",
+            "liftzero_bc",
+            "liftzero_bc_cnp",
+        ]
 
     def test_the_full_strategy_enables_everything(self) -> None:
         """It is the union of every mechanism."""

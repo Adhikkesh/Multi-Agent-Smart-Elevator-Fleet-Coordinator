@@ -79,6 +79,9 @@ class DispatcherAgent(CommunicatingAgent):
         self._mailbox: list[Message] = []
         self._open_round: tuple[HallCall, dict[str, Any]] | None = None
         self._round_view: tuple[tuple[Any, ...], Any] | None = None
+        #: DAgger mixing statistics: auctions awarded by the shadow teacher vs the learner.
+        self.teacher_awards: int = 0
+        self.learner_awards: int = 0
         self._moved_this_tick: dict[HallCall, tuple[int | None, int]] = {}
 
     # ------------------------------------------------------------------ sensing
@@ -230,6 +233,7 @@ class DispatcherAgent(CommunicatingAgent):
         )
 
         bids: list[Bid] = []
+        shadows: list[Bid] = []
         for reply in replies:
             car_id = int(reply.content["car_id"])
             if reply.performative is Performative.PROPOSE:
@@ -237,9 +241,15 @@ class DispatcherAgent(CommunicatingAgent):
             else:
                 reason = str(reply.content.get("reason", "refused"))
                 bids.append(Bid(car_id=car_id, total=float("inf"), refused=True, reason=reason))
+            shadow = reply.content.get("shadow")
+            if isinstance(shadow, Bid):
+                shadows.append(shadow)
         bids.sort(key=lambda b: b.car_id)
+        shadows.sort(key=lambda b: b.car_id)
+        shadow_bids = tuple(shadows) if shadows and len(shadows) == len(bids) else None
+        award_bids = self._dagger_mix(bids, shadow_bids)
 
-        viable = [b for b in bids if not b.refused]
+        viable = [b for b in award_bids if not b.refused]
         round_record = AuctionRound(
             tick=self.model.tick, conversation_id=conversation_id, call=call, bids=bids
         )
@@ -249,7 +259,9 @@ class DispatcherAgent(CommunicatingAgent):
             ranked = sorted(viable, key=lambda b: (b.total, b.car_id))
             winner = ranked[0]
             round_record.winner = winner.car_id
-            round_record.reason = explain_award(call, winner, ranked, bids)
+            round_record.reason = explain_award(call, winner, ranked, award_bids)
+            if self.model.strategy.uses_learned_bidder:
+                round_record.reason += liftzero_trace(bids, shadow_bids, award_bids is not bids)
             self.assignments[call] = winner.car_id
             for bid in viable:
                 performative = (
@@ -292,9 +304,27 @@ class DispatcherAgent(CommunicatingAgent):
                 building=self.model.config.building,
                 seed=self.model.seed_value,
                 strategy=self.model.strategy.name,
+                bidder=self.model.strategy.bidder,
+                shadow_bids=shadow_bids,
             )
             for hook in self.model.decision_hooks:
                 hook(event)
+
+    def _dagger_mix(self, bids: list[Bid], shadow_bids: tuple[Bid, ...] | None) -> list[Bid]:
+        """The bids the award is decided on: usually the cars' own, but under DAgger mixing
+        (``lift.beta`` > 0) the shadow teacher's with probability beta.
+
+        Mixing keeps DAgger exploration safe: the learner drives most auctions (so the
+        data shows the states *it* induces) while the teacher still steers a fraction.
+        """
+        beta = self.model.config.lift.beta
+        if shadow_bids is None or beta <= 0.0 or self.model.dagger_rng is None:
+            return bids
+        if self.model.dagger_rng.random() < beta:
+            self.teacher_awards += 1
+            return list(shadow_bids)
+        self.learner_awards += 1
+        return bids
 
     # ------------------------------------------ periodic global reassignment (SA)
 
@@ -614,6 +644,26 @@ def explain_award(call: HallCall, winner: Bid, ranked: list[Bid], bids: list[Bid
     refused = [b for b in bids if b.refused]
     if refused:
         text += "; " + ", ".join(f"car {b.car_id} refused ({b.reason})" for b in refused)
+    return text
+
+
+def liftzero_trace(
+    bids: list[Bid], shadow_bids: tuple[Bid, ...] | None, teacher_awarded: bool
+) -> str:
+    """Decision-trace suffix for a learned auction: the net's bids and the teacher's view."""
+    viable = sorted((b for b in bids if not b.refused), key=lambda b: (b.total, b.car_id))
+    text = " [LiftZero] net bids: " + ", ".join(f"car {b.car_id}={b.total:.1f}" for b in viable[:3])
+    if shadow_bids is not None:
+        teacher = sorted(
+            (b for b in shadow_bids if not b.refused), key=lambda b: (b.total, b.car_id)
+        )
+        if viable and teacher:
+            if teacher[0].car_id == viable[0].car_id:
+                text += "; teacher agrees"
+            else:
+                text += f"; teacher would pick car {teacher[0].car_id}"
+    if teacher_awarded:
+        text += " (awarded by teacher: DAgger mixing)"
     return text
 
 

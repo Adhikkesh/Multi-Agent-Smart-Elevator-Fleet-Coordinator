@@ -139,6 +139,19 @@ SYSTEM_PEAS: dict[str, str] = {
 }
 
 
+def strategy_meta(strategy: Any) -> dict[str, Any]:
+    """A strategy's dashboard entry, with whether it can run here and why not.
+
+    Learned strategies need their ONNX model; a missing or incompatible model makes the
+    strategy *unavailable* (with the reason) — it is never silently replaced by the
+    classical bidder.
+    """
+    from elevator_mas.learning.lift.bidder import strategy_availability
+
+    available, reason = strategy_availability(strategy)
+    return {**strategy.as_dict(), "available": available, "reason": reason}
+
+
 def create_app(scenario: str = "demo_story") -> FastAPI:
     """Build the FastAPI application around one simulation session."""
     session = SimulationSession(scenario)
@@ -173,7 +186,7 @@ def create_app(scenario: str = "demo_story") -> FastAPI:
         """Scenarios, strategies, PEAS tables and the environment classification."""
         return {
             "scenarios": available_scenarios(),
-            "strategies": [s.as_dict() for s in STRATEGIES.values()],
+            "strategies": [strategy_meta(s) for s in STRATEGIES.values()],
             "agents": [
                 {
                     "name": cls.__name__,

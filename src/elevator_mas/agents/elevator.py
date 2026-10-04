@@ -481,7 +481,13 @@ class ElevatorAgent(CommunicatingAgent):
     def _answer_cfp(self, cfp: Message) -> None:
         """Compute this car's own bid for the announced call and reply to the auctioneer."""
         call = cfp.content["call"]
-        bid = self.compute_bid(call, int(cfp.content.get("urgency", 0)))
+        urgency = int(cfp.content.get("urgency", 0))
+        shadow: Bid | None = None
+        if self.model.learned_bidder is not None:
+            waiting = int(cfp.content.get("waiting", 0))
+            bid, shadow = self.learned_bid(call, urgency, waiting, cfp.conversation_id)
+        else:
+            bid = self.compute_bid(call, urgency)
         content: dict[str, Any] = {"call": call, "car_id": self.car_id}
         if bid.refused:
             content["reason"] = bid.reason
@@ -489,7 +495,29 @@ class ElevatorAgent(CommunicatingAgent):
         else:
             content["bid"] = bid
             performative = Performative.PROPOSE
+        if shadow is not None:
+            content["shadow"] = shadow
         self.send(performative, cfp.sender, cfp.conversation_id, content)
+
+    def learned_bid(
+        self, call: HallCall, urgency: int, waiting: int, conversation_id: Any
+    ) -> tuple[Bid, Bid | None]:
+        """LiftZero bid (and, with ``shadow_teacher``, the classical bid it imitates).
+
+        Eligibility stays classical: a car that cannot take the call refuses exactly as it
+        would under the teacher, and the network is consulted only for eligible cars. The
+        shadow bid is the car's own A* marginal cost — sent along for DAgger labels and
+        agreement statistics, never used for the award unless DAgger mixing says so.
+        """
+        shadow = (
+            self.marginal_cost(call, urgency) if self.model.config.lift.shadow_teacher else None
+        )
+        refusal = self._refusal()
+        if refusal is not None:
+            return refusal, shadow
+        bid = self.model.learned_bidder.bid(self.car_id, call, urgency, waiting, conversation_id)
+        self.last_bid = bid
+        return bid, shadow
 
     def _honour_award(self, award: Message) -> None:
         """Take on a call this car has won, and light the landing's hall lantern.
