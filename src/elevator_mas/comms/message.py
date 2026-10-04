@@ -7,7 +7,9 @@ Contract Net round together, and the content.
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -72,7 +74,7 @@ class Message:
             "sender": self.sender,
             "receiver": self.receiver or "broadcast",
             "conversation_id": self.conversation_id,
-            "content": _jsonable(self.content),
+            "content": jsonable(self.content),
         }
 
     def __str__(self) -> str:
@@ -80,16 +82,22 @@ class Message:
         return f"[t={self.tick}] {self.sender} -{self.performative.value}-> {target}"
 
 
-def _jsonable(value: Any) -> Any:
-    """Coerce enums, dataclass-ish values and containers into JSON-safe values."""
+def jsonable(value: Any) -> Any:
+    """Coerce enums, dataclasses and containers into strictly JSON-safe values.
+
+    "Strictly" matters: browsers' `JSON.parse` rejects `Infinity` and `NaN`, which Python
+    would otherwise happily emit (a refused bid costs infinity), so those become `None`.
+    """
     if isinstance(value, Enum):
         return value.name
     if isinstance(value, dict):
-        return {str(k): _jsonable(v) for k, v in value.items()}
+        return {str(k): jsonable(v) for k, v in value.items()}
     if isinstance(value, list | tuple | set | frozenset):
-        return [_jsonable(v) for v in value]
+        return [jsonable(v) for v in value]
     if isinstance(value, float):
-        return round(value, 3)
+        return round(value, 3) if math.isfinite(value) else None
     if hasattr(value, "as_dict"):
-        return value.as_dict()
+        return jsonable(value.as_dict())
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {f.name: jsonable(getattr(value, f.name)) for f in dataclasses.fields(value)}
     return value

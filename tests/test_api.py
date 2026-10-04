@@ -254,3 +254,27 @@ class TestWebSocket:
             client.post("/api/step", json={"ticks": 3})
             second = socket.receive_json()
             assert second["tick"] > first["tick"]
+
+
+class TestStrictJson:
+    """Browsers' JSON.parse rejects Infinity/NaN and Python objects that are not JSON."""
+
+    def test_websocket_frames_are_strict_json(self) -> None:
+        import json
+
+        from fastapi.testclient import TestClient
+
+        from elevator_mas.api.server import create_app
+
+        app = create_app("demo_story")
+        app.state.session.model.run(150)  # long enough for refused bids and calls in messages
+        client = TestClient(app)
+        with client.websocket_connect("/ws") as socket:
+            text = socket.receive_text()
+
+        def reject(constant: str) -> None:
+            raise ValueError(f"non-strict JSON constant {constant}")
+
+        frame = json.loads(text, parse_constant=reject)
+        assert frame["tick"] == 150
+        assert any(m["performative"] == "REQUEST" for m in frame["messages"]) or frame["messages"]

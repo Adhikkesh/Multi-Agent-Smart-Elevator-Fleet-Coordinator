@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 from typing import Any
 
+from elevator_mas.comms.message import jsonable
 from elevator_mas.config import ScenarioConfig, available_scenarios
 from elevator_mas.model import ElevatorModel
 from elevator_mas.planning import ALGORITHMS
@@ -147,7 +148,7 @@ class SimulationSession:
 
     def snapshot(self) -> dict[str, Any]:
         """The world state plus the session's own controls."""
-        payload = self.model.snapshot()
+        payload: dict[str, Any] = jsonable(self.model.snapshot())
         payload["session"] = {
             "running": self.running,
             "speed": self.speed,

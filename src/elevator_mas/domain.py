@@ -6,6 +6,7 @@ isolation.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -163,7 +164,7 @@ class Bid:
         """JSON-friendly form for the API."""
         return {
             "car_id": self.car_id,
-            "total": round(self.total, 3),
+            "total": round(self.total, 3) if math.isfinite(self.total) else None,
             "wait": round(self.wait, 3),
             "ride": round(self.ride, 3),
             "crowding": round(self.crowding, 3),
