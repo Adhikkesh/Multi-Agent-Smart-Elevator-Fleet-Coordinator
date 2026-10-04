@@ -16,11 +16,11 @@ from elevator_mas.learning.schema import (
 
 
 def test_schema_constants() -> None:
-    assert FEATURE_VERSION == 1
+    assert FEATURE_VERSION == 2
     assert MAX_CARS == 16
     assert KC == 14
     assert KCAR == 26
-    assert KG == 6
+    assert KG == 10
 
 
 def test_feature_names_dimensions() -> None:
@@ -38,3 +38,12 @@ def test_patterns_one_hot() -> None:
 def test_schema_hash_stability() -> None:
     assert len(SCHEMA_HASH) == 16
     assert get_schema_hash() == SCHEMA_HASH
+
+
+def test_glob_token_ends_with_the_four_cost_weights() -> None:
+    assert FEATURE_NAMES["glob"][-4:] == [
+        "weight_wait",
+        "weight_ride",
+        "weight_crowding",
+        "weight_energy",
+    ]

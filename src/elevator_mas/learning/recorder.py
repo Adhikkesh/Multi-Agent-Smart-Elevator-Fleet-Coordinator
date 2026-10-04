@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -20,12 +21,16 @@ from elevator_mas.config import (
     TimingConfig,
     TrafficConfig,
 )
+from elevator_mas.domain import Bid
 from elevator_mas.learning.features import encode_decision
 from elevator_mas.learning.schema import (
     FEATURE_VERSION,
     MAX_CARS,
     PATTERNS,
     SCHEMA_HASH,
+    SOURCES,
+    SPLITS,
+    TEACHERS,
 )
 from elevator_mas.learning.view import from_event
 
@@ -44,9 +49,13 @@ def get_git_sha() -> str:
 
 
 def determine_split(seed: int, floors: int, cars: int) -> int:
-    """Split allocation: 0 = train, 1 = val, 2 = test."""
+    """Split code by *run seed* (never by decision): 0 train, 1 val, 2 test, 3 test_large.
+
+    The large 33-40 floor x 7-8 car buildings are only ever sampled for test seeds, and are
+    held out as their own split so fleet-size generalisation can be measured separately.
+    """
     if floors >= 33 and cars >= 7:
-        return 2  # Held-out large regime exclusively in test
+        return SPLITS["test_large"]
     if seed < 8000:
         return 0
     if seed < 8500:
@@ -136,8 +145,73 @@ def sample_random_regime(run_id: int, seed: int, teacher_choice: str) -> Scenari
     )
 
 
+#: Names of the per-decision arrays a shard stores, in write order.
+SHARD_ARRAYS: tuple[str, ...] = (
+    "call",
+    "cars",
+    "glob",
+    "mask",
+    "eligible",
+    "teacher_cost",
+    "teacher_wait",
+    "teacher_ride",
+    "teacher_crowding",
+    "teacher_energy",
+    "winner",
+    "executed",
+    "run_id",
+    "tick",
+    "split",
+    "teacher",
+    "source",
+)
+
+_DTYPES: dict[str, type] = {
+    "mask": bool,
+    "eligible": bool,
+    "winner": np.int16,
+    "executed": np.int16,
+    "run_id": np.int32,
+    "tick": np.int32,
+    "split": np.int8,
+    "teacher": np.int8,
+    "source": np.int8,
+}
+
+
+def teacher_code(strategy: str) -> int:
+    """Index of the classical teacher behind ``strategy`` in ``TEACHERS`` (-1 if none).
+
+    A learned strategy is labelled by the classical strategy it shadows (its ``teacher``),
+    so DAgger data and expert data share one code space.
+    """
+    if strategy in TEACHERS:
+        return TEACHERS.index(strategy)
+    try:
+        from elevator_mas.strategies import get_strategy
+
+        teacher = getattr(get_strategy(strategy), "teacher", None)
+    except ValueError:
+        return -1
+    return TEACHERS.index(teacher) if teacher in TEACHERS else -1
+
+
+def label_winner(bids: tuple[Bid, ...] | list[Bid]) -> int:
+    """The teacher's award for a set of bids: lowest total, ties to the lowest car id."""
+    viable = [b for b in bids if not b.refused and np.isfinite(b.total)]
+    if not viable:
+        return -1
+    return min(viable, key=lambda b: (b.total, b.car_id)).car_id
+
+
 class DecisionRecorder:
-    """Collects DecisionEvents from ElevatorModel and serializes to .npz shards."""
+    """Collects DecisionEvents from ElevatorModel and serializes them to .npz shards.
+
+    Labels always come from the *classical* teacher: the auction's own bids for a classical
+    strategy, or the shadow bids for a learned strategy run with ``shadow_teacher`` on (the
+    DAgger setting, where the learner chooses the states and the teacher labels them). The
+    award that was actually executed is stored separately in ``executed``.
+    """
 
     def __init__(
         self,
@@ -145,79 +219,72 @@ class DecisionRecorder:
         shard_prefix: str = "shard",
         shard_capacity: int = 50000,
         teacher: str = "mixed",
+        source: str = "expert",
     ) -> None:
+        if source not in SOURCES:
+            raise ValueError(f"unknown source {source!r}; expected one of {SOURCES}")
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.shard_prefix = shard_prefix
         self.shard_capacity = shard_capacity
         self.teacher = teacher
+        self.source = source
         self.shard_index = 0
         self.git_sha = get_git_sha()
-
+        self.skipped_unlabelled = 0
+        self.recorded_total = 0
+        self._buf: dict[str, list[Any]] = {}
         self._reset_buffer()
 
     def _reset_buffer(self) -> None:
-        self.buf_call = []
-        self.buf_cars = []
-        self.buf_glob = []
-        self.buf_mask = []
-        self.buf_eligible = []
-        self.buf_teacher_cost = []
-        self.buf_teacher_wait = []
-        self.buf_teacher_ride = []
-        self.buf_teacher_crowd = []
-        self.buf_teacher_energy = []
-        self.buf_winner = []
-        self.buf_run_id = []
-        self.buf_tick = []
-        self.buf_split = []
+        self._buf = {name: [] for name in SHARD_ARRAYS}
+
+    @property
+    def buffered(self) -> int:
+        """Decisions recorded since the last flush."""
+        return len(self._buf["winner"])
 
     def __call__(self, event: DecisionEvent) -> None:
         """Hook callback for each auction decision in ElevatorModel."""
-        ctx = from_event(event)
-        enc = encode_decision(ctx)
+        if event.bidder == "learned" and event.shadow_bids is None:
+            # A learned auction without shadow labels carries no teacher signal.
+            self.skipped_unlabelled += 1
+            return
+        label_bids = event.shadow_bids if event.shadow_bids is not None else event.bids
+        enc = encode_decision(from_event(event))
 
-        n_cars = event.building.cars
         costs = np.full(MAX_CARS, 1e6, dtype=np.float32)
-        waits = np.zeros(MAX_CARS, dtype=np.float32)
-        rides = np.zeros(MAX_CARS, dtype=np.float32)
-        crowds = np.zeros(MAX_CARS, dtype=np.float32)
-        energies = np.zeros(MAX_CARS, dtype=np.float32)
+        parts = {k: np.zeros(MAX_CARS, dtype=np.float32) for k in _PARTS}
+        for b in label_bids:
+            if b.car_id < MAX_CARS and not b.refused and np.isfinite(b.total):
+                costs[b.car_id] = b.total
+                for k in _PARTS:
+                    parts[k][b.car_id] = getattr(b, k)
 
-        for b in event.bids:
-            cid = b.car_id
-            if cid < MAX_CARS:
-                if not b.refused and np.isfinite(b.total):
-                    costs[cid] = b.total
-                    waits[cid] = b.wait
-                    rides[cid] = b.ride
-                    crowds[cid] = b.crowding
-                    energies[cid] = b.energy
-                else:
-                    costs[cid] = 1e6
+        floors, n_cars = event.building.floors, event.building.cars
+        buf = self._buf
+        buf["call"].append(enc.call)
+        buf["cars"].append(enc.cars)
+        buf["glob"].append(enc.glob)
+        buf["mask"].append(enc.mask)
+        buf["eligible"].append(enc.eligible)
+        buf["teacher_cost"].append(costs)
+        for k in _PARTS:
+            buf[f"teacher_{k}"].append(parts[k])
+        buf["winner"].append(label_winner(label_bids))
+        buf["executed"].append(-1 if event.winner is None else event.winner)
+        buf["run_id"].append(event.seed)
+        buf["tick"].append(event.tick)
+        buf["split"].append(determine_split(event.seed, floors, n_cars))
+        buf["teacher"].append(teacher_code(event.strategy))
+        buf["source"].append(SOURCES.index(self.source))
+        self.recorded_total += 1
 
-        split = determine_split(event.seed, event.building.floors, n_cars)
-
-        self.buf_call.append(enc.call)
-        self.buf_cars.append(enc.cars)
-        self.buf_glob.append(enc.glob)
-        self.buf_mask.append(enc.mask)
-        self.buf_eligible.append(enc.eligible)
-        self.buf_teacher_cost.append(costs)
-        self.buf_teacher_wait.append(waits)
-        self.buf_teacher_ride.append(rides)
-        self.buf_teacher_crowd.append(crowds)
-        self.buf_teacher_energy.append(energies)
-        self.buf_winner.append(-1 if event.winner is None else event.winner)
-        self.buf_run_id.append(event.seed)
-        self.buf_tick.append(event.tick)
-        self.buf_split.append(split)
-
-        if len(self.buf_winner) >= self.shard_capacity:
+        if self.buffered >= self.shard_capacity:
             self.flush()
 
     def flush(self) -> Path | None:
-        if not self.buf_winner:
+        if not self.buffered:
             return None
 
         out_path = self.output_dir / f"{self.shard_prefix}_{self.shard_index:04d}.npz"
@@ -228,34 +295,28 @@ class DecisionRecorder:
         meta = {
             "feature_version": FEATURE_VERSION,
             "teacher": self.teacher,
+            "teachers": list(TEACHERS),
+            "source": self.source,
+            "sources": list(SOURCES),
+            "splits": SPLITS,
             "schema_hash": SCHEMA_HASH,
             "git_sha": self.git_sha,
             "max_cars": MAX_CARS,
-            "count": len(self.buf_winner),
+            "count": self.buffered,
         }
-
-        np.savez_compressed(
-            out_path,
-            call=np.array(self.buf_call, dtype=np.float32),
-            cars=np.array(self.buf_cars, dtype=np.float32),
-            glob=np.array(self.buf_glob, dtype=np.float32),
-            mask=np.array(self.buf_mask, dtype=bool),
-            eligible=np.array(self.buf_eligible, dtype=bool),
-            teacher_cost=np.array(self.buf_teacher_cost, dtype=np.float32),
-            teacher_wait=np.array(self.buf_teacher_wait, dtype=np.float32),
-            teacher_ride=np.array(self.buf_teacher_ride, dtype=np.float32),
-            teacher_crowding=np.array(self.buf_teacher_crowd, dtype=np.float32),
-            teacher_energy=np.array(self.buf_teacher_energy, dtype=np.float32),
-            winner=np.array(self.buf_winner, dtype=np.int16),
-            run_id=np.array(self.buf_run_id, dtype=np.int32),
-            tick=np.array(self.buf_tick, dtype=np.int32),
-            split=np.array(self.buf_split, dtype=np.int8),
-            meta_json=json.dumps(meta),
-        )
+        arrays = {
+            name: np.array(values, dtype=_DTYPES.get(name, np.float32))
+            for name, values in self._buf.items()
+        }
+        np.savez_compressed(out_path, meta_json=json.dumps(meta), **arrays)
 
         self.shard_index += 1
         self._reset_buffer()
         return out_path
+
+
+#: The four bid components a teacher reports, stored as ``teacher_<part>``.
+_PARTS: tuple[str, ...] = ("wait", "ride", "crowding", "energy")
 
 
 def harvest_run(config: ScenarioConfig, recorder: DecisionRecorder) -> int:
@@ -264,10 +325,10 @@ def harvest_run(config: ScenarioConfig, recorder: DecisionRecorder) -> int:
 
     model = ElevatorModel(config=config, seed=config.seed)
     model.decision_hooks.append(recorder)
-    start_count = len(recorder.buf_winner)
+    before = recorder.recorded_total
     for _ in range(config.duration):
         model.step()
-    return len(recorder.buf_winner) - start_count
+    return recorder.recorded_total - before
 
 
 def _worker_harvest(

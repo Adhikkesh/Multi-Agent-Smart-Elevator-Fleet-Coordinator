@@ -3,7 +3,7 @@
 Produces:
   call: [KC=14] float32
   cars: [MAX_CARS=16, KCAR=26] float32
-  glob: [KG=6] float32
+  glob: [KG=10] float32
   mask: [MAX_CARS=16] bool
   eligible: [MAX_CARS=16] bool
 """
@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from elevator_mas.learning.schema import KC, KCAR, KG, MAX_CARS, PATTERNS
+from elevator_mas.learning.schema import KC, KCAR, KG, MAX_CARS, PATTERNS, WEIGHT_SCALE
 from elevator_mas.learning.view import DecisionContext
 
 
@@ -163,7 +163,7 @@ def encode_decision(ctx: DecisionContext) -> Encoded:
         else:
             cars_arr[i, 25] = np.clip(abs(c_floor - float(ctx.call_floor)) / fm1, 0.0, 1.0)
 
-    # ------------------------------------------------------------- 3. Global token [KG=6]
+    # ------------------------------------------------------------ 3. Global token [KG=10]
     glob_arr = np.zeros(KG, dtype=np.float32)
     glob_arr[0] = np.clip(float(ctx.tick) / 3600.0, 0.0, 1.0)
     glob_arr[1] = np.clip(float(f) / 40.0, 0.0, 1.0)
@@ -180,6 +180,10 @@ def encode_decision(ctx: DecisionContext) -> Encoded:
             if fleet.availables[i] and fleet.n_assigned[i] == 0 and fleet.riders[i] == 0:
                 idle_count += 1
         glob_arr[5] = np.clip(float(idle_count) / float(n_cars), 0.0, 1.0)
+
+    # 6..9. Public cost weights W1-W4 (wait, ride, crowding, energy)
+    for k, w in enumerate(ctx.weights):
+        glob_arr[6 + k] = np.clip(float(w) / WEIGHT_SCALE, 0.0, 1.0)
 
     return Encoded(
         call=call_arr,

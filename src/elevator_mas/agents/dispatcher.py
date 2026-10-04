@@ -291,6 +291,7 @@ class DispatcherAgent(CommunicatingAgent):
                 winner=winner.car_id if viable else None,
                 building=self.model.config.building,
                 seed=self.model.seed_value,
+                strategy=self.model.strategy.name,
             )
             for hook in self.model.decision_hooks:
                 hook(event)

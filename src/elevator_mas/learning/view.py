@@ -13,6 +13,7 @@ import numpy as np
 
 from elevator_mas.comms.board import CarStatus, DecisionEvent, FleetPolicy
 from elevator_mas.domain import Direction
+from elevator_mas.learning.schema import DEFAULT_WEIGHTS
 
 
 @dataclass
@@ -59,6 +60,9 @@ class DecisionContext:
 
     fleet: FleetView
 
+    #: Public cost weights (W1-W4: wait, ride, crowding, energy) from the board's policy.
+    weights: tuple[float, float, float, float] = DEFAULT_WEIGHTS
+
 
 def _dir_to_int(d: Direction | int | str) -> int:
     if isinstance(d, Direction):
@@ -90,6 +94,14 @@ def _door_to_int(door: str | int) -> int:
     if "open" in s:
         return 2
     return 0
+
+
+def _policy_weights(policy: FleetPolicy) -> tuple[float, float, float, float]:
+    """The four public cost weights a policy carries (defaults if it has none)."""
+    w = getattr(policy, "weights", None)
+    if w is None:
+        return DEFAULT_WEIGHTS
+    return (float(w.wait), float(w.ride), float(w.crowding), float(w.energy))
 
 
 def from_event(event: DecisionEvent) -> DecisionContext:
@@ -177,6 +189,7 @@ def from_event(event: DecisionEvent) -> DecisionContext:
         tick=event.tick,
         open_calls_count=open_calls,
         fleet=fleet,
+        weights=_policy_weights(event.policy),
     )
 
 

@@ -121,6 +121,13 @@ class DecisionEvent:
     winner: int | None
     building: Any
     seed: int
+    #: Name of the strategy that ran the auction ("" when built outside a model).
+    strategy: str = ""
+    #: Which bidder produced ``bids``: "classical" (A*/reflex rules) or "learned" (LiftZero).
+    bidder: str = "classical"
+    #: Classical bids computed alongside learned ones when ``shadow_teacher`` is on; they are
+    #: never used for the award, only for DAgger labels and agreement statistics.
+    shadow_bids: tuple[Bid, ...] | None = None
 
 
 class StatusBoard:

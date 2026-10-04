@@ -379,3 +379,21 @@ def test_hypothesis_feature_bounds(
     # Call and global token in [0, 1] or [-1, 1]
     assert np.all(enc.call >= -1.0) and np.all(enc.call <= 1.0)
     assert np.all(enc.glob >= 0.0) and np.all(enc.glob <= 1.0)
+
+
+def test_board_weights_are_encoded_in_the_global_token() -> None:
+    from elevator_mas.config import CostWeights
+    from elevator_mas.learning.schema import DEFAULT_WEIGHTS, WEIGHT_SCALE
+
+    ctx = make_dummy_context()
+    enc = encode_decision(ctx)
+    np.testing.assert_allclose(enc.glob[6:], np.array(DEFAULT_WEIGHTS) / WEIGHT_SCALE)
+
+    policy = FleetPolicy(weights=CostWeights(wait=1.4, ride=0.3, crowding=0.5, energy=0.1))
+    assert from_event_weights(policy) == (1.4, 0.3, 0.5, 0.1)
+
+
+def from_event_weights(policy: FleetPolicy) -> tuple[float, float, float, float]:
+    from elevator_mas.learning.view import _policy_weights
+
+    return _policy_weights(policy)

@@ -1,13 +1,50 @@
-"""Expert dataset loader, splits, batch iterator, and dataset statistics."""
+"""Expert dataset loader, splits, batch iterator, and dataset statistics.
+
+Shards are written by :class:`~elevator_mas.learning.recorder.DecisionRecorder`. Older (v1)
+shards without the ``teacher``/``source``/``executed`` arrays still load: missing arrays are
+filled with "unknown teacher", "expert" and the label winner respectively.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
+
+from elevator_mas.learning.schema import SOURCES, SPLITS, TEACHERS
+
+#: Per-decision arrays every dataset carries (label arrays included).
+ARRAY_FIELDS: tuple[str, ...] = (
+    "call",
+    "cars",
+    "glob",
+    "mask",
+    "eligible",
+    "teacher_cost",
+    "teacher_wait",
+    "teacher_ride",
+    "teacher_crowding",
+    "teacher_energy",
+    "winner",
+    "executed",
+    "run_id",
+    "tick",
+    "split_arr",
+    "teacher",
+    "source",
+)
+
+#: Cost sentinel for refused / padded cars (never ``inf`` in stored labels).
+REFUSED_COST = 1e6
+
+#: Car-feature column indices used by the distance/ETA baselines.
+_DIST_COL = 20
+_ETA_COL = 19
 
 
 @dataclass
@@ -21,104 +58,110 @@ class DatasetStats:
     hard_decision_pct: float
     nearest_baseline_acc: float
     lowest_eta_acc: float
+    test_large_count: int = 0
+
+
+def _shard_paths(p: Path) -> list[Path]:
+    if p.is_file():
+        return [p]
+    if p.is_dir():
+        return sorted(p.glob("*.npz"))
+    return []
 
 
 class ExpertDataset:
-    """Memory-mapped or in-memory expert dataset over recorded shards."""
+    """In-memory expert dataset over one or more recorded shards (or shard directories)."""
 
     def __init__(
         self,
-        shards_dir_or_file: Path | str,
-        split: str | None = None,  # "train", "val", "test", or None (all)
+        shards_dir_or_file: Path | str | list[Path | str],
+        split: str | None = None,  # "train", "val", "test", "test_large", or None (all)
     ) -> None:
-        p = Path(shards_dir_or_file)
-        if p.is_file():
-            shard_paths = [p]
-        elif p.is_dir():
-            shard_paths = sorted(p.glob("*.npz"))
-        else:
-            shard_paths = []
-
+        sources = (
+            shards_dir_or_file if isinstance(shards_dir_or_file, list) else [shards_dir_or_file]
+        )
+        shard_paths: list[Path] = []
+        for src in sources:
+            shard_paths.extend(_shard_paths(Path(src)))
         if not shard_paths:
-            raise FileNotFoundError(f"No .npz shards found at {p}")
+            raise FileNotFoundError(f"No .npz shards found at {shards_dir_or_file}")
+        self.shard_paths = shard_paths
 
-        # Combine arrays across shards
-        calls, cars, globs, masks, eligibles = [], [], [], [], []
-        t_costs, t_waits, t_rides, t_crowds, t_energies = [], [], [], [], []
-        winners, run_ids, ticks, splits = [], [], [], []
-        meta_list = []
-
+        parts: dict[str, list[np.ndarray]] = {name: [] for name in ARRAY_FIELDS}
+        meta_list: list[dict[str, Any]] = []
         for sp in shard_paths:
-            data = np.load(sp, allow_pickle=True)
-            calls.append(data["call"])
-            cars.append(data["cars"])
-            globs.append(data["glob"])
-            masks.append(data["mask"])
-            eligibles.append(data["eligible"])
-            t_costs.append(data["teacher_cost"])
-            t_waits.append(data["teacher_wait"])
-            t_rides.append(data["teacher_ride"])
-            t_crowds.append(data["teacher_crowding"])
-            t_energies.append(data["teacher_energy"])
-            winners.append(data["winner"])
-            run_ids.append(data["run_id"])
-            ticks.append(data["tick"])
-            splits.append(data["split"])
-            if "meta_json" in data:
-                meta_list.append(str(data["meta_json"]))
+            with np.load(sp, allow_pickle=False) as data:
+                n = len(data["winner"])
+                for name in ARRAY_FIELDS:
+                    key = "split" if name == "split_arr" else name
+                    if key in data:
+                        parts[name].append(data[key])
+                    else:
+                        parts[name].append(_default_array(name, data, n))
+                if "meta_json" in data:
+                    meta_list.append(json.loads(str(data["meta_json"])))
 
-        self.call = np.concatenate(calls, axis=0)
-        self.cars = np.concatenate(cars, axis=0)
-        self.glob = np.concatenate(globs, axis=0)
-        self.mask = np.concatenate(masks, axis=0)
-        self.eligible = np.concatenate(eligibles, axis=0)
-        self.teacher_cost = np.concatenate(t_costs, axis=0)
-        self.teacher_wait = np.concatenate(t_waits, axis=0)
-        self.teacher_ride = np.concatenate(t_rides, axis=0)
-        self.teacher_crowding = np.concatenate(t_crowds, axis=0)
-        self.teacher_energy = np.concatenate(t_energies, axis=0)
-        self.winner = np.concatenate(winners, axis=0)
-        self.run_id = np.concatenate(run_ids, axis=0)
-        self.tick = np.concatenate(ticks, axis=0)
-        self.split_arr = np.concatenate(splits, axis=0)
-        self.meta = json.loads(meta_list[0]) if meta_list else {}
+        for name, arrays in parts.items():
+            setattr(self, name, np.concatenate(arrays, axis=0))
+        self.meta: dict[str, Any] = meta_list[0] if meta_list else {}
+        self.metas = meta_list
 
-        # Filter by split if requested
         if split is not None:
-            split_code = {"train": 0, "val": 1, "test": 2}.get(split.lower(), -1)
-            if split_code >= 0:
-                idx = np.where(self.split_arr == split_code)[0]
-                self._filter_indices(idx)
+            code = SPLITS.get(split.lower())
+            if code is None:
+                raise ValueError(f"unknown split {split!r}; expected one of {list(SPLITS)}")
+            self._filter_indices(np.flatnonzero(self.split_arr == code))
+
+    # Attributes populated dynamically above, declared for type checkers.
+    call: np.ndarray
+    cars: np.ndarray
+    glob: np.ndarray
+    mask: np.ndarray
+    eligible: np.ndarray
+    teacher_cost: np.ndarray
+    teacher_wait: np.ndarray
+    teacher_ride: np.ndarray
+    teacher_crowding: np.ndarray
+    teacher_energy: np.ndarray
+    winner: np.ndarray
+    executed: np.ndarray
+    run_id: np.ndarray
+    tick: np.ndarray
+    split_arr: np.ndarray
+    teacher: np.ndarray
+    source: np.ndarray
 
     def _filter_indices(self, idx: np.ndarray) -> None:
-        self.call = self.call[idx]
-        self.cars = self.cars[idx]
-        self.glob = self.glob[idx]
-        self.mask = self.mask[idx]
-        self.eligible = self.eligible[idx]
-        self.teacher_cost = self.teacher_cost[idx]
-        self.teacher_wait = self.teacher_wait[idx]
-        self.teacher_ride = self.teacher_ride[idx]
-        self.teacher_crowding = self.teacher_crowding[idx]
-        self.teacher_energy = self.teacher_energy[idx]
-        self.winner = self.winner[idx]
-        self.run_id = self.run_id[idx]
-        self.tick = self.tick[idx]
-        self.split_arr = self.split_arr[idx]
+        for name in ARRAY_FIELDS:
+            setattr(self, name, getattr(self, name)[idx])
+
+    def subset(self, keep: np.ndarray) -> ExpertDataset:
+        """A filtered copy (boolean mask or index array); the original is untouched."""
+        out = object.__new__(ExpertDataset)
+        out.meta = self.meta
+        out.metas = self.metas
+        out.shard_paths = self.shard_paths
+        idx = np.flatnonzero(keep) if keep.dtype == bool else keep
+        for name in ARRAY_FIELDS:
+            setattr(out, name, getattr(self, name)[idx])
+        return out
+
+    def by_teacher(self, teacher: str) -> ExpertDataset:
+        """Only the decisions labelled by ``teacher`` (one of ``TEACHERS``)."""
+        return self.subset(self.teacher == TEACHERS.index(teacher))
+
+    def by_source(self, source: str) -> ExpertDataset:
+        """Only the decisions from ``source`` (one of ``SOURCES``)."""
+        return self.subset(self.source == SOURCES.index(source))
 
     def __len__(self) -> int:
         return len(self.winner)
 
     def batch(self, indices: np.ndarray) -> dict[str, np.ndarray]:
-        return {
-            "call": self.call[indices],
-            "cars": self.cars[indices],
-            "glob": self.glob[indices],
-            "mask": self.mask[indices],
-            "eligible": self.eligible[indices],
-            "teacher_cost": self.teacher_cost[indices],
-            "winner": self.winner[indices],
-        }
+        """Every per-decision array for ``indices`` (the split column as ``split``)."""
+        out = {name: getattr(self, name)[indices] for name in ARRAY_FIELDS}
+        out["split"] = out.pop("split_arr")
+        return out
 
     def iter_batches(
         self,
@@ -136,68 +179,76 @@ class ExpertDataset:
             b_idx = indices[i : min(i + batch_size, n)]
             yield self.batch(b_idx)
 
+    # ----------------------------------------------------------------- analysis
+
+    @property
+    def n_eligible(self) -> np.ndarray:
+        """Number of eligible (priced) cars per decision."""
+        return np.sum(self.eligible & self.mask, axis=1)
+
+    def nontrivial_mask(self) -> np.ndarray:
+        """Decisions with a winner and at least two eligible cars to choose between."""
+        return (self.winner >= 0) & (self.n_eligible >= 2)
+
     def hard_mask(self) -> np.ndarray:
-        """Returns boolean mask where winner margin < 10% of best cost."""
+        """Non-trivial decisions whose runner-up is within 10 % of the best cost.
+
+        ``<=`` (not ``<``) so exact ties — including two cars both bidding 0 — count as hard.
+        """
         sorted_costs = np.sort(self.teacher_cost, axis=1)
         best = sorted_costs[:, 0]
         second = sorted_costs[:, 1]
         margin = second - best
-        is_hard = (margin < (0.10 * best)) & (best < 1e5) & (self.winner >= 0)
-        return is_hard
+        return (margin <= 0.10 * best) & (second < REFUSED_COST / 10) & self.nontrivial_mask()
+
+    def baseline_choice(self, column: int) -> np.ndarray:
+        """argmin of one car-feature column over eligible cars (ties to the lowest car id)."""
+        vals = np.where(self.eligible & self.mask, self.cars[:, :, column], np.inf)
+        return np.argmin(vals, axis=1)
+
+    def content_hash(self) -> str:
+        """Short hash of the features and labels — identifies the exact training data."""
+        h = hashlib.sha256()
+        for name in ("call", "cars", "glob", "teacher_cost", "winner", "split_arr"):
+            h.update(np.ascontiguousarray(getattr(self, name)).tobytes())
+        return h.hexdigest()[:16]
 
     def stats(self) -> DatasetStats:
         n = len(self)
         if n == 0:
             return DatasetStats(0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-        n_train = int(np.sum(self.split_arr == 0))
-        n_val = int(np.sum(self.split_arr == 1))
-        n_test = int(np.sum(self.split_arr == 2))
+        valid = self.winner >= 0
+        n_valid = int(valid.sum())
 
-        all_refused = np.sum(self.winner == -1)
-        all_refused_pct = float(all_refused / n * 100.0)
-
-        elig_counts = np.sum(self.eligible, axis=1)
-        single_elig = np.sum(elig_counts == 1)
-        single_elig_pct = float(single_elig / n * 100.0)
-
-        is_hard = self.hard_mask()
-        hard_pct = float(np.sum(is_hard) / n * 100.0)
-
-        # Baseline accuracies on non-refused decisions
-        valid_idx = np.where(self.winner >= 0)[0]
-        nearest_matches = 0
-        lowest_eta_matches = 0
-
-        if len(valid_idx) > 0:
-            for i in valid_idx:
-                w = self.winner[i]
-                elig = self.eligible[i]
-                dists = np.where(elig, self.cars[i, :, 20], 1e6)
-                if np.argmin(dists) == w:
-                    nearest_matches += 1
-
-                etas = np.where(elig, self.cars[i, :, 19], 1e6)
-                if np.argmin(etas) == w:
-                    lowest_eta_matches += 1
-
-            nearest_acc = float(nearest_matches / len(valid_idx) * 100.0)
-            lowest_eta_acc = float(lowest_eta_matches / len(valid_idx) * 100.0)
-        else:
-            nearest_acc = 0.0
-            lowest_eta_acc = 0.0
+        def agree(choice: np.ndarray) -> float:
+            if n_valid == 0:
+                return 0.0
+            return float(np.mean(choice[valid] == self.winner[valid]) * 100.0)
 
         return DatasetStats(
             total_decisions=n,
-            train_count=n_train,
-            val_count=n_val,
-            test_count=n_test,
-            all_refused_pct=all_refused_pct,
-            single_eligible_pct=single_elig_pct,
-            hard_decision_pct=hard_pct,
-            nearest_baseline_acc=nearest_acc,
-            lowest_eta_acc=lowest_eta_acc,
+            train_count=int(np.sum(self.split_arr == SPLITS["train"])),
+            val_count=int(np.sum(self.split_arr == SPLITS["val"])),
+            test_count=int(np.sum(self.split_arr == SPLITS["test"])),
+            all_refused_pct=float(np.mean(~valid) * 100.0),
+            single_eligible_pct=float(np.mean(self.n_eligible == 1) * 100.0),
+            hard_decision_pct=float(np.mean(self.hard_mask()) * 100.0),
+            nearest_baseline_acc=agree(self.baseline_choice(_DIST_COL)),
+            lowest_eta_acc=agree(self.baseline_choice(_ETA_COL)),
+            test_large_count=int(np.sum(self.split_arr == SPLITS["test_large"])),
         )
+
+
+def _default_array(name: str, data: Any, n: int) -> np.ndarray:
+    """Fill-in for arrays that older shards do not carry."""
+    if name == "executed":
+        return np.asarray(data["winner"], dtype=np.int16)
+    if name == "teacher":
+        return np.full(n, -1, dtype=np.int8)
+    if name == "source":
+        return np.zeros(n, dtype=np.int8)
+    raise KeyError(f"shard is missing required array {name!r}")
 
 
 def load_shards(path: Path | str, split: str | None = None) -> ExpertDataset:
