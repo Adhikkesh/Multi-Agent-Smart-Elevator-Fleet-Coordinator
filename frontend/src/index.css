@@ -1,0 +1,139 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 220 14% 96%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 215 16% 90%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 215 16% 92%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 88%;
+    --input: 214 32% 88%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+
+    --status-ok: #10b981;
+    --status-warn: #f59e0b;
+    --status-danger: #ef4444;
+    --status-info: #3b82f6;
+
+    --perf-request: #0284c7;
+    --perf-cfp: #d97706;
+    --perf-propose: #7c3aed;
+    --perf-refuse: #dc2626;
+    --perf-accept: #059669;
+    --perf-reject: #ea580c;
+    --perf-inform: #2563eb;
+    --perf-cancel: #64748b;
+    --perf-failure: #b91c1c;
+
+    --term-wait: #0284c7;
+    --term-ride: #7c3aed;
+    --term-crowding: #d97706;
+    --term-energy: #059669;
+  }
+
+  .dark {
+    --background: 224 25% 8%;
+    --foreground: 213 31% 91%;
+    --card: 224 22% 11%;
+    --card-foreground: 213 31% 91%;
+    --popover: 224 22% 11%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 223 18% 16%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 223 18% 16%;
+    --muted-foreground: 217 14% 62%;
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 223 18% 18%;
+    --input: 223 18% 18%;
+    --ring: 217 91% 60%;
+
+    --status-ok: #34d399;
+    --status-warn: #fbbf24;
+    --status-danger: #f87171;
+    --status-info: #60a5fa;
+
+    --perf-request: #38bdf8;
+    --perf-cfp: #fbbf24;
+    --perf-propose: #a78bfa;
+    --perf-refuse: #f87171;
+    --perf-accept: #34d399;
+    --perf-reject: #fb923c;
+    --perf-inform: #60a5fa;
+    --perf-cancel: #94a3b8;
+    --perf-failure: #ef4444;
+
+    --term-wait: #38bdf8;
+    --term-ride: #a78bfa;
+    --term-crowding: #fbbf24;
+    --term-energy: #34d399;
+  }
+}
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+.font-mono,
+code,
+pre,
+.num-tabular {
+  font-family: "JetBrains Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbar for control room panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.45);
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.pulse-anim {
+  animation: pulse-dot 2s infinite ease-in-out;
+}

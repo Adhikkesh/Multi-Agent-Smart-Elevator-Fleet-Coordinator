@@ -1,0 +1,799 @@
+[
+  {
+    "id": 0,
+    "scenario": "demo_story",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 8,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      },
+      {
+        "floor": 14,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      },
+      {
+        "floor": 7,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      },
+      {
+        "floor": 3,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 2.0
+      }
+    ],
+    "h_at_start": 81.0,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 130.0,
+      "nodes_expanded": 5,
+      "nodes_generated": 13,
+      "max_frontier": 8,
+      "runtime_ms": 0.0491,
+      "depth": 4,
+      "route": [
+        "3D",
+        "7D",
+        "8D",
+        "14D"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 1,
+    "scenario": "demo_story",
+    "car_id": 0,
+    "current_floor": 4,
+    "stops": [
+      {
+        "floor": 8,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      },
+      {
+        "floor": 5,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 3.0
+      },
+      {
+        "floor": 7,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      },
+      {
+        "floor": 14,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 49.0,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 109.0,
+      "nodes_expanded": 6,
+      "nodes_generated": 16,
+      "max_frontier": 10,
+      "runtime_ms": 0.0597,
+      "depth": 4,
+      "route": [
+        "5D",
+        "7D",
+        "8D",
+        "14D"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 2,
+    "scenario": "morning_up_peak",
+    "car_id": 0,
+    "current_floor": 4,
+    "stops": [
+      {
+        "floor": 9,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      },
+      {
+        "floor": 6,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 18.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 30.5,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0104,
+      "depth": 2,
+      "route": [
+        "6D",
+        "9vP"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 3,
+    "scenario": "morning_up_peak",
+    "car_id": 2,
+    "current_floor": 5,
+    "stops": [
+      {
+        "floor": 9,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      },
+      {
+        "floor": 14,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 32.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 67.0,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0113,
+      "depth": 2,
+      "route": [
+        "14vP",
+        "9vP"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 4,
+    "scenario": "morning_up_peak",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 0,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 2.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 7.0,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 26.0,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0112,
+      "depth": 2,
+      "route": [
+        "0D",
+        "2^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 5,
+    "scenario": "morning_up_peak",
+    "car_id": 1,
+    "current_floor": 2,
+    "stops": [
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 1.0
+      },
+      {
+        "floor": 0,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 2.0
+      }
+    ],
+    "h_at_start": 11.0,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 39.0,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0109,
+      "depth": 2,
+      "route": [
+        "0^P",
+        "2^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 6,
+    "scenario": "morning_up_peak",
+    "car_id": 0,
+    "current_floor": 3,
+    "stops": [
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      },
+      {
+        "floor": 8,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 14.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 49.0,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0105,
+      "depth": 2,
+      "route": [
+        "8D",
+        "3vP"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 7,
+    "scenario": "morning_up_peak",
+    "car_id": 2,
+    "current_floor": 1,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 1.0
+      },
+      {
+        "floor": 8,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 19.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 31.5,
+      "nodes_expanded": 2,
+      "nodes_generated": 4,
+      "max_frontier": 2,
+      "runtime_ms": 0.0136,
+      "depth": 2,
+      "route": [
+        "1^P",
+        "8D"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 8,
+    "scenario": "morning_up_peak",
+    "car_id": 3,
+    "current_floor": 13,
+    "stops": [
+      {
+        "floor": 14,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      },
+      {
+        "floor": 14,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 6.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 18.5,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0096,
+      "depth": 2,
+      "route": [
+        "14D",
+        "14vP"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 9,
+    "scenario": "evening_down_peak",
+    "car_id": 0,
+    "current_floor": 5,
+    "stops": [
+      {
+        "floor": 5,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      },
+      {
+        "floor": 11,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 17.0,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 56.0,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0111,
+      "depth": 2,
+      "route": [
+        "11vP",
+        "5vP"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 10,
+    "scenario": "evening_down_peak",
+    "car_id": 3,
+    "current_floor": 5,
+    "stops": [
+      {
+        "floor": 5,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      },
+      {
+        "floor": 11,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 17.0,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 56.0,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0119,
+      "depth": 2,
+      "route": [
+        "11vP",
+        "5vP"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 11,
+    "scenario": "evening_down_peak",
+    "car_id": 3,
+    "current_floor": 10,
+    "stops": [
+      {
+        "floor": 5,
+        "kind": "pickup",
+        "direction": "DOWN",
+        "weight": 1.0
+      },
+      {
+        "floor": 10,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 14.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 26.5,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0106,
+      "depth": 2,
+      "route": [
+        "10D",
+        "5vP"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 12,
+    "scenario": "lunch_two_way",
+    "car_id": 0,
+    "current_floor": 8,
+    "stops": [
+      {
+        "floor": 0,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 1.0
+      },
+      {
+        "floor": 13,
+        "kind": "dropoff",
+        "direction": "IDLE",
+        "weight": 1.0
+      }
+    ],
+    "h_at_start": 37.0,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 69.0,
+      "nodes_expanded": 2,
+      "nodes_generated": 3,
+      "max_frontier": 1,
+      "runtime_ms": 0.0105,
+      "depth": 2,
+      "route": [
+        "13D",
+        "0^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 13,
+    "scenario": "random",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      },
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 4.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      }
+    ],
+    "h_at_start": 46.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 176.5,
+      "nodes_expanded": 3,
+      "nodes_generated": 4,
+      "max_frontier": 1,
+      "runtime_ms": 0.0183,
+      "depth": 3,
+      "route": [
+        "1^P",
+        "2^P",
+        "3^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 14,
+    "scenario": "random",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      },
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 4.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      }
+    ],
+    "h_at_start": 46.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 176.5,
+      "nodes_expanded": 3,
+      "nodes_generated": 4,
+      "max_frontier": 1,
+      "runtime_ms": 0.0169,
+      "depth": 3,
+      "route": [
+        "1^P",
+        "2^P",
+        "3^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 15,
+    "scenario": "random",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      },
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 4.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      }
+    ],
+    "h_at_start": 46.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 176.5,
+      "nodes_expanded": 3,
+      "nodes_generated": 4,
+      "max_frontier": 1,
+      "runtime_ms": 0.0167,
+      "depth": 3,
+      "route": [
+        "1^P",
+        "2^P",
+        "3^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 16,
+    "scenario": "random",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      },
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 4.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      }
+    ],
+    "h_at_start": 46.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 176.5,
+      "nodes_expanded": 3,
+      "nodes_generated": 4,
+      "max_frontier": 1,
+      "runtime_ms": 0.0164,
+      "depth": 3,
+      "route": [
+        "1^P",
+        "2^P",
+        "3^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 17,
+    "scenario": "random",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      },
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 4.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      }
+    ],
+    "h_at_start": 46.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 176.5,
+      "nodes_expanded": 3,
+      "nodes_generated": 4,
+      "max_frontier": 1,
+      "runtime_ms": 0.0177,
+      "depth": 3,
+      "route": [
+        "1^P",
+        "2^P",
+        "3^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 18,
+    "scenario": "random",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      },
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 4.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      }
+    ],
+    "h_at_start": 46.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 176.5,
+      "nodes_expanded": 3,
+      "nodes_generated": 4,
+      "max_frontier": 1,
+      "runtime_ms": 0.0165,
+      "depth": 3,
+      "route": [
+        "1^P",
+        "2^P",
+        "3^P"
+      ],
+      "optimal": true
+    }
+  },
+  {
+    "id": 19,
+    "scenario": "random",
+    "car_id": 0,
+    "current_floor": 0,
+    "stops": [
+      {
+        "floor": 1,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      },
+      {
+        "floor": 3,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 4.0
+      },
+      {
+        "floor": 2,
+        "kind": "pickup",
+        "direction": "UP",
+        "weight": 3.0
+      }
+    ],
+    "h_at_start": 46.5,
+    "astar": {
+      "algorithm": "astar",
+      "found": true,
+      "cost": 176.5,
+      "nodes_expanded": 3,
+      "nodes_generated": 4,
+      "max_frontier": 1,
+      "runtime_ms": 0.0168,
+      "depth": 3,
+      "route": [
+        "1^P",
+        "2^P",
+        "3^P"
+      ],
+      "optimal": true
+    }
+  }
+]
