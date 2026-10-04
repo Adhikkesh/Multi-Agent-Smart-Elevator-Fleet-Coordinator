@@ -1,0 +1,12 @@
+# LiftZero behaviour cloning — smoke preset (~3 min, 50k decisions, 3 epochs; CI / tests).
+name: bc_smoke
+data_train: [data/expert/train]
+data_val: [data/expert/val]
+max_train_decisions: 50000
+max_val_decisions: 10000
+epochs: 3
+batch_size: 512
+warmup_steps: 100
+patience: 3
+device: auto
+seed: 0

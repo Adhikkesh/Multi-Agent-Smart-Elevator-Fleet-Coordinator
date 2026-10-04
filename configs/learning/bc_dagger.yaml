@@ -1,0 +1,11 @@
+# LiftZero DAgger fine-tuning — aggregated expert + dagger data, lower lr, <= 10 epochs.
+name: bc_dagger
+data_train: [data/expert/train]
+data_val: [data/expert/val]
+max_val_decisions: 60000
+epochs: 10
+lr: 3.0e-4
+warmup_steps: 200
+patience: 3
+device: auto
+seed: 0

@@ -1,0 +1,37 @@
+# LiftZero behaviour cloning — default preset (full train split, <= 45 min on 8 CPU cores).
+name: bc_default
+data_train: [data/expert/train]
+data_val: [data/expert/val]
+max_train_decisions: null
+max_val_decisions: 60000
+trivial_keep_fraction: 0.05
+epochs: 30
+batch_size: 512
+lr: 1.0e-3
+min_lr: 1.0e-5
+weight_decay: 1.0e-2
+betas: [0.9, 0.99]
+warmup_steps: 500
+grad_clip: 1.0
+patience: 4
+device: auto
+seed: 0
+model:
+  d_model: 64
+  n_layers: 4
+  n_heads: 4
+  ffn_mult: 4
+  dropout: 0.05
+loss:
+  listwise: 1.0
+  regression: 0.5
+  rank: 0.5
+  aux: 0.2
+  pairwise: 0.3
+  pair_margin: 0.1
+  hard_pair_weight: 2.0
+augment:
+  permute: true
+  car_dropout_p: 0.3
+  car_dropout_max: 3
+  feature_noise: 0.01
