@@ -27,3 +27,6 @@ frontend/playwright-report/
 # Learning data
 data/
 tests/learning/fixtures/worker_*.npz
+
+# Training runs (final summaries are copied to docs/lift/)
+runs/
