@@ -134,7 +134,8 @@ def _evaluate_real(
         "long_wait_pct": m.long_wait_pct,
         "throughput": m.throughput,
         "energy": m.energy,
-        "decisions": res.total_messages,
+        "decisions": m.calls,
+        "violations": len(res.violations),
         "wall_s": wall_s,
     }
 

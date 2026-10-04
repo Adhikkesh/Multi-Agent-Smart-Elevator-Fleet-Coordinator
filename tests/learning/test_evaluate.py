@@ -21,3 +21,15 @@ def test_evaluate_twin_smoke() -> None:
     assert len(summary) == 1
     assert "avg_wait_mean" in summary.columns
     assert "avg_wait_ci_low" in summary.columns
+
+
+def test_evaluate_real_backend_runs_and_reports_safety() -> None:
+    cfg = load_regimes_config()
+    reg = cfg.eval_regimes["interfloor"]
+    df = evaluate("cnp_astar", regimes=[reg], backend="real", seeds=[8000])
+    assert len(df) == 1
+    row = df.iloc[0]
+    assert row["backend"] == "real"
+    assert row["decisions"] > 0
+    assert row["violations"] == 0
+    assert row["avg_wait"] > 0

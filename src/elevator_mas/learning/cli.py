@@ -125,10 +125,15 @@ def bench_env(
         f"Vector ({envs} envs): {dec_per_sec_vec:,.0f} decisions/sec "
         f"({total_steps:,} in {t_vec:.2f}s)"
     )
-    typer.echo(
-        f"Speedup vs real sim target (>=20x): PASS "
-        f"(Single ~{dec_per_sec_single / 150:.1f}x real cnp_astar)\n"
-    )
+    # 3. Real simulator reference: auction decisions per second for cnp_astar.
+    from elevator_mas.learning.evaluate import evaluate
+
+    ref = evaluate("cnp_astar", regimes=["two_way"], backend="real", seeds=[8000])
+    real_rate = float(ref["decisions"].sum()) / max(float(ref["wall_s"].sum()), 1e-6)
+    speedup = dec_per_sec_single / max(real_rate, 1e-6)
+    verdict = "PASS" if speedup >= 20.0 else "FAIL"
+    typer.echo(f"Real sim (cnp_astar): {real_rate:,.0f} decisions/sec")
+    typer.echo(f"Speedup vs real sim (target >=20x): {speedup:.1f}x [{verdict}]\n")
 
 
 @learn_app.command("validate-twin")
