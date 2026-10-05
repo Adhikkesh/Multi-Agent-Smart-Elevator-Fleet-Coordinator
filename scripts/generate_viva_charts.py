@@ -354,6 +354,48 @@ def fig_ppo() -> None:
     save(fig, "fig9_ppo_learning_curves.png")
 
 
+def fig_mcts() -> None:
+    p = ROOT / "reports" / "lift" / "mcts_closed_loop.csv"
+    if not p.exists():
+        print("  skip fig10 (run the look-ahead evaluation first)")
+        return
+    df = pd.read_csv(p)
+    strategies = [s for s in ("full", "liftzero_bc", "liftzero_bc_mcts") if s in set(df.strategy)]
+    colors = {
+        "full": COLORS["full"],
+        "liftzero_bc": COLORS["liftzero_bc"],
+        "liftzero_bc_mcts": "#4a3aa7",
+    }
+    labels = {**LABELS, "liftzero_bc_mcts": "LiftZero-BC + look-ahead"}
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.2), gridspec_kw={"width_ratios": [3, 1.3]})
+    x = np.arange(len(REGIMES))
+    w = 0.26
+    for k, st in enumerate(strategies):
+        m, lo, hi = [], [], []
+        for r in REGIMES:
+            v = df[(df.strategy == st) & (df.regime == r)].avg_wait.to_numpy(float)
+            a, b = ci95(v)
+            m.append(v.mean())
+            lo.append(v.mean() - a)
+            hi.append(b - v.mean())
+        pos = x + (k - (len(strategies) - 1) / 2) * (w + 0.02)
+        a1.bar(pos, m, w, color=colors[st], label=labels[st], zorder=2)
+        a1.errorbar(pos, m, yerr=[lo, hi], fmt="none", ecolor=INK2, elinewidth=1, capsize=2)
+    a1.set_xticks(x, [REGIME_LABEL[r] for r in REGIMES], fontsize=9)
+    a1.set_ylabel("average wait (s)")
+    a1.set_title("Look-ahead vs reflex learned bidding (20 test seeds)", loc="left")
+    a1.legend()
+    a1.grid(axis="x", visible=False)
+    ms = [df[df.strategy == st].compute_ms_per_tick.mean() for st in strategies]
+    short = {"full": "Full", "liftzero_bc": "BC", "liftzero_bc_mcts": "BC + look-ahead"}
+    a2.barh([short[s] for s in strategies], ms, color=[colors[s] for s in strategies], zorder=2)
+    fig.subplots_adjust(wspace=0.35)
+    a2.set_xlabel("compute per simulated second (ms)")
+    a2.set_title("Cost of deliberation", loc="left")
+    a2.grid(axis="y", visible=False)
+    save(fig, "fig10_mcts_lookahead.png")
+
+
 def main() -> None:
     style()
     print("Generating viva charts ->", OUT)
@@ -383,7 +425,7 @@ def main() -> None:
     fig_offline()
     fig_latency()
     fig_ppo()
-    print("  MCTS search-dynamics figure: not generated (Phase 6 search not implemented)")
+    fig_mcts()
 
 
 if __name__ == "__main__":

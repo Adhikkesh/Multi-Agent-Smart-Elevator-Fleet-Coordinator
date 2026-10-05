@@ -266,7 +266,7 @@ function numberDot(s, x, y, label, fill = TEAL) {
   ], { x: 0.6, y: 3.35, w: 6.3, h: 3.2, fontSize: 15 });
   card(s, 7.4, 1.4, 5.3, 2.0, TINT2);
   text(s, "Implemented: live in the Brain panel", { x: 7.65, y: 1.5, w: 4.8, h: 0.4, fontSize: 17, bold: true, color: TEAL });
-  text(s, "~22 simulations to depth 3 in a 50 ms budget; searches ~70 % of auctions and overrides the network on ~15–20 % of them, with zero safety violations.", { x: 7.65, y: 1.95, w: 4.8, h: 1.35, fontSize: 15, valign: "top" });
+  text(s, "~22 simulations to depth 3 in 50 ms. On 20 test seeds: up-peak wait 36.3 → 31.9 s, lower in all 4 regimes (not yet significant); 0 safety violations.", { x: 7.65, y: 1.95, w: 4.8, h: 1.35, fontSize: 15, valign: "top" });
   const why = [["Reflex", "learned bid: 0.19 ms, no look-ahead"], ["Deliberative", "search: simulates the next minute"], ["Hybrid", "search only when bids are close"]];
   why.forEach(([h, d], i) => {
     const y = 3.75 + i * 0.95;

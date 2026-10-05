@@ -209,7 +209,8 @@ until that run finishes.
   ≤ 50 ms budget, anytime. Measured: ~22 simulations to depth 3 in 50 ms; searches ~70 % of
   auctions, overrides the network on ~15–20 % of them; 0 safety violations. Live in the
   **LiftZero Brain** page (`/brain`): bids, attention, search visits/Q, and a "Why?" occlusion
-  explanation per decision.
+  explanation per decision. Result (20 test seeds): lower average wait than LiftZero-BC in all
+  four regimes (up-peak 36.3 → 31.9 s), not yet statistically significant.
 
 ---
 
@@ -274,8 +275,9 @@ until that run finishes.
 ## 9. What we did not finish (say it before they ask)
 
 * PPO training results (code and tests ready; not trained for this submission).
-* A large-scale evaluation of the look-ahead strategy (it runs and is safe; its benefit over
-  the plain learned bidder is not yet measured on 100 seeds).
+* A large-scale evaluation of the look-ahead: on 20 test seeds it lowered average wait in all
+  four regimes (up-peak −12 %, down-peak −3.4 %, two-way −1.9 %, inter-floor −0.8 %) but no
+  difference is statistically significant (Wilcoxon p ≥ 0.12); it costs ~8× more compute.
 * A faithful fast twin (measured 3.7× faster than the real simulator; its scenario-event bug is
   fixed) — so RL trains on the real simulator.
 
