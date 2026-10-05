@@ -396,6 +396,52 @@ def fig_mcts() -> None:
     save(fig, "fig10_mcts_lookahead.png")
 
 
+def fig_classic_failure(df: pd.DataFrame) -> None:
+    """Morning up-peak: the four classical strategies (slide 3)."""
+    order = ["nearest_car", "collective", "cnp_astar", "full"]
+    names = ["Nearest car", "Collective (LOOK)", "Contract Net + A*", "Full agent system"]
+    vals = [df[(df.strategy == s) & (df.regime == "up_peak")].avg_wait.mean() for s in order]
+    fig, ax = plt.subplots(figsize=(7, 4.6))
+    bars = ax.barh(names[::-1], vals[::-1], color=[COLORS[s] for s in order][::-1], zorder=2)
+    ax.bar_label(bars, fmt="%.1f s", padding=4, color=INK, fontsize=11)
+    ax.set_xlabel("average wait (s)")
+    ax.set_xlim(0, max(vals) * 1.18)
+    ax.set_title("Morning up-peak: average wait, 100 test seeds", loc="left")
+    ax.grid(axis="y", visible=False)
+    ax.tick_params(axis="y", labelsize=11)
+    save(fig, "fig11_classic_failure.png")
+
+
+def fig_search_comparison() -> None:
+    """Nodes expanded and optimality of BFS / UCS / Greedy / A* (slide 9)."""
+    p = ROOT / "reports" / "search_benchmark_summary.csv"
+    if not p.exists():
+        print("  skip fig12 (run scripts/search_benchmark.py first)")
+        return
+    d = pd.read_csv(p).set_index("algorithm").loc[["bfs", "ucs", "greedy", "astar"]]
+    names = ["BFS", "UCS", "Greedy", "A*"]
+    cols = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
+    fig, ax = plt.subplots(figsize=(6.6, 4.6))
+    bars = ax.bar(names, d.nodes_mean, color=cols, zorder=2, width=0.6)
+    for b, opt in zip(bars, d.optimal_pct, strict=True):
+        ax.annotate(
+            f"{b.get_height():.1f} nodes\n{opt:.0f} % optimal",
+            (b.get_x() + b.get_width() / 2, b.get_height()),
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            color=INK,
+            xytext=(0, 4),
+            textcoords="offset points",
+        )
+    ax.set_ylabel("mean nodes expanded")
+    ax.set_ylim(0, d.nodes_mean.max() * 1.3)
+    ax.set_title("200 random 7-stop routing problems", loc="left")
+    ax.grid(axis="x", visible=False)
+    ax.tick_params(axis="x", labelsize=12)
+    save(fig, "fig12_search_comparison.png")
+
+
 def main() -> None:
     style()
     print("Generating viva charts ->", OUT)
@@ -418,6 +464,7 @@ def main() -> None:
             "fig3_energy_efficiency.png",
         )
         fig_learned_vs_teacher(df)
+        fig_classic_failure(df)
     else:
         print("  skip fig1-4 (run `elevator lift eval-sim` first)")
     fig_bc_training()
@@ -426,6 +473,7 @@ def main() -> None:
     fig_latency()
     fig_ppo()
     fig_mcts()
+    fig_search_comparison()
 
 
 if __name__ == "__main__":
