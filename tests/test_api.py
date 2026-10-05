@@ -324,7 +324,9 @@ class TestPhase2Additions:
         response = client.get("/api/version")
         assert response.status_code == 200
         data = response.json()
-        assert data["app"] == "2.0.0-dev"
+        from elevator_mas import __version__
+
+        assert data["app"] == __version__
         assert "git" in data
 
     def test_run_endpoint_success_and_determinism(self, client) -> None:

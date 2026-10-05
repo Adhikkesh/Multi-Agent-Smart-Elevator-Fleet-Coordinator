@@ -639,7 +639,7 @@ def create_app(scenario: str = "demo_story") -> FastAPI:
                 git_sha = proc.stdout.strip() or None
         except Exception:
             pass
-        return {"app": "2.0.0-dev", "git": git_sha}
+        return {"app": __version__, "git": git_sha}
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
