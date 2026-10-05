@@ -1,65 +1,44 @@
-import { Brain, Cpu, Network, Sparkles } from "lucide-react";
+import { BrainCircuit, ChevronRight, Cpu } from "lucide-react";
 import React from "react";
+import { Link } from "react-router-dom";
 import { useLiveStore } from "../../store/liveStore";
 
+/** Mission Control card: which bidder the cars use right now, and a link to the Brain page. */
 export const BrainPanel: React.FC = () => {
-  const snapshot = useLiveStore((s) => s.snapshot);
-  const brain = snapshot?.brain;
+  const strategy = useLiveStore((s) => s.snapshot?.strategy) ?? "";
+  const learned = strategy.startsWith("liftzero");
+  const lookahead = strategy.endsWith("mcts");
 
   return (
     <div className="flex flex-col rounded-xl border border-border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between border-b border-border pb-2">
         <div className="flex items-center gap-2">
-          <Brain className="h-4 w-4 text-purple-400" />
-          <h2 className="text-sm font-semibold text-foreground">
-            LiftZero Neural Bidder (Phase 6)
-          </h2>
+          <BrainCircuit className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">How the cars bid</h2>
         </div>
-        <span className="rounded-full bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-400">
-          {brain ? "Active Model" : "Placeholder"}
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+            learned ? "bg-primary/15 text-primary" : "bg-secondary text-secondary-foreground"
+          }`}
+        >
+          {learned ? (lookahead ? "Learned + look-ahead" : "Learned (LiftZero)") : "Classical A*"}
         </span>
       </div>
-
-      {brain ? (
-        <div className="space-y-3 text-xs">
-          <div className="flex justify-between font-mono">
-            <span className="text-muted-foreground">Model: {brain.model}</span>
-            <span className="text-muted-foreground">Params: {brain.params.toLocaleString()}</span>
-            <span className="text-muted-foreground">Latency: {brain.latency_ms}ms</span>
-          </div>
-          {brain.decision && (
-            <div className="rounded bg-muted/40 p-2 font-mono">
-              Chosen Car: {brain.decision.chosen}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-4 text-center text-xs">
-          <div className="mb-3 flex items-center gap-4 text-muted-foreground/60">
-            <div className="flex flex-col items-center gap-1">
-              <Network className="h-6 w-6 text-primary/70" />
-              <span className="text-[10px]">Fleet State</span>
-            </div>
-            <span className="font-mono text-xs">→</span>
-            <div className="flex flex-col items-center gap-1">
-              <Cpu className="h-7 w-7 text-purple-400/80" />
-              <span className="text-[10px]">Deep Policy</span>
-            </div>
-            <span className="font-mono text-xs">→</span>
-            <div className="flex flex-col items-center gap-1">
-              <Sparkles className="h-6 w-6 text-amber-400/80" />
-              <span className="text-[10px]">Learned Bids</span>
-            </div>
-          </div>
-          <p className="font-medium text-foreground">
-            LiftZero model not loaded — running the classical Contract-Net bidder.
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground max-w-sm">
-            Phase 6 will train a neural network against A* expert demonstrations to replace the
-            heuristic evaluation function with a learned valuation function.
-          </p>
-        </div>
-      )}
+      <div className="flex items-start gap-3 text-xs">
+        <Cpu className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+        <p className="text-muted-foreground">
+          {learned
+            ? "Each car prices the call with the LiftZero neural network (trained by imitating the A* bid)" +
+              (lookahead ? "; close calls are settled by a short look-ahead search." : ".")
+            : "Each car bids the marginal cost of adding the call to its own A*-planned route. Switch the strategy to a LiftZero option to see learned bids."}
+        </p>
+      </div>
+      <Link
+        to="/brain"
+        className="mt-3 inline-flex items-center gap-1 self-start rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary"
+      >
+        Open LiftZero Brain <ChevronRight className="h-3.5 w-3.5" />
+      </Link>
     </div>
   );
 };

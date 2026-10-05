@@ -95,6 +95,8 @@ const AppShell: React.FC = () => {
         navigate("/experiments");
       } else if (e.key === "5") {
         navigate("/theory");
+      } else if (e.key === "6") {
+        navigate("/brain");
       } else if ((e.key === "p" || e.key === "P") && !e.ctrlKey && !e.metaKey) {
         navigate("/story");
       } else if ((e.key === "t" || e.key === "T") && !e.ctrlKey && !e.metaKey) {

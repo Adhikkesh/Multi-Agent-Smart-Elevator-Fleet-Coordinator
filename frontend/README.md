@@ -33,6 +33,6 @@ pnpm build
 
 ## Test Coverage
 
-- **Vitest Unit Tests**: 66 tests passing with >88% statement coverage across client, stores, formatters, and routing algorithms.
+- **Vitest Unit Tests**: 72 tests passing with >88% statement coverage across client, stores, formatters, and routing algorithms.
 - **Algorithm Parity**: 20 deterministic Python-generated routing fixtures verified with 100% numerical parity for A* sequence, cost, and node expansions.
 - **Playwright E2E**: 16 end-to-end tests validating live controls, car selection, fault injection, fire drills, auction visualization, message filtering, agent graphs, inspector drawers, step-through search lab, benchmark runners, compare mode, story mode, classic fallback, and WCAG 2.1 AA axe accessibility audits.

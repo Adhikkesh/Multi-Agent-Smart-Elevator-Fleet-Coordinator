@@ -15,7 +15,7 @@ export const KeyboardShortcutsDialog: React.FC = () => {
     { key: "R", desc: "Reset simulation" },
     { key: "F", desc: "Inject fire alarm" },
     { key: "B", desc: "Break car (fault injection)" },
-    { key: "1 – 5", desc: "Switch navigation pages" },
+    { key: "1 – 6", desc: "Pages: Mission Control, Agents, Lab, Experiments, Theory, Brain" },
     { key: "P", desc: "Toggle presentation / story mode" },
     { key: "T", desc: "Toggle dark / light theme" },
     { key: "?", desc: "Open this cheat-sheet" },

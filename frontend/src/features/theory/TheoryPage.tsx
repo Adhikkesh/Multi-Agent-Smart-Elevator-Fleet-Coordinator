@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
+import { cleanDocstring } from "../../lib/docstring";
 import React, { useState } from "react";
 import { api } from "../../api/client";
 import { PERFORMATIVE_COLORS } from "../../lib/colors";
@@ -134,7 +135,7 @@ export const TheoryPage: React.FC = () => {
               </span>
             </div>
             <p className="text-muted-foreground italic">
-              {meta.agents[activeAgentTab]?.docstring}
+              {cleanDocstring(meta.agents[activeAgentTab]?.docstring ?? "")}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2">

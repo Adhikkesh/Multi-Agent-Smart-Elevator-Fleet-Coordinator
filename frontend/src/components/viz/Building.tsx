@@ -66,12 +66,12 @@ export const Building: React.FC = () => {
       {/* Building Container with scroll if needed */}
       <div className="relative flex-1 overflow-auto rounded-lg border border-border/60 bg-muted/20 p-2">
         <div
-          className="relative flex min-w-[500px] justify-center gap-2"
+          className="relative flex justify-start gap-2"
           style={{ height: `${buildingHeightPx}px` }}
         >
           {/* Left Floor Gutter */}
           <div
-            className="flex w-36 shrink-0 flex-col justify-between border-r border-border/80 pr-2 select-none"
+            className="flex w-32 shrink-0 flex-col justify-between border-r border-border/80 pr-2 select-none"
             style={{ height: `${buildingHeightPx}px` }}
           >
             {floorList.map((floorNum) => {
@@ -147,7 +147,7 @@ export const Building: React.FC = () => {
               return (
                 <div
                   key={car.car_id}
-                  className="relative flex h-full w-24 sm:w-28 flex-col items-center border-x border-dashed border-border/40 bg-background/50"
+                  className="relative flex h-full min-w-[64px] max-w-28 flex-1 flex-col items-center border-x border-dashed border-border/40 bg-background/50"
                   style={{ height: `${buildingHeightPx}px` }}
                 >
                   {/* Floor grid horizontal dividers */}

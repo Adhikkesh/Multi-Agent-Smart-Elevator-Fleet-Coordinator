@@ -145,3 +145,14 @@ describe("DecisionDetail", () => {
     expect(screen.getByText("yes")).toBeInTheDocument();
   });
 });
+
+describe("Theory page docstring cleaning", () => {
+  it("strips markdown emphasis and the trailing PEAS block", async () => {
+    const { cleanDocstring } = await import("../../lib/docstring");
+    expect(
+      cleanDocstring(
+        "A person. **AIMA agent type: simple reflex** (§2.4.2). *if here* board. PEAS - **P** wait",
+      ),
+    ).toBe("A person. AIMA agent type: simple reflex (§2.4.2). if here board.");
+  });
+});

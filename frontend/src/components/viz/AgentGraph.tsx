@@ -46,7 +46,8 @@ export const AgentGraph: React.FC = () => {
       },
       {
         id: "safety",
-        position: { x: 100, y: 40 },
+        position: { x: 60, y: 40 },
+        style: { width: 190 },
         data: {
           label: (
             <div
@@ -62,6 +63,7 @@ export const AgentGraph: React.FC = () => {
       {
         id: "monitor",
         position: { x: 420, y: 40 },
+        style: { width: 190 },
         data: {
           label: (
             <div
@@ -80,7 +82,8 @@ export const AgentGraph: React.FC = () => {
     cars.forEach((c, idx) => {
       list.push({
         id: `car-${c.car_id}`,
-        position: { x: 60 + idx * 130, y: 310 },
+        // Centred under the dispatcher (x 260, width 150), 170 px apart so nodes never overlap.
+        position: { x: 260 + (idx - (cars.length - 1) / 2) * 170, y: 310 },
         data: {
           label: (
             <div
