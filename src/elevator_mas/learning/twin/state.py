@@ -240,8 +240,10 @@ class TwinSimulator:
             self._advance_car(car)
 
     def _apply_scenario_event(self, ev: Any) -> None:
-        t = getattr(ev, "type", "")
-        car_id = getattr(ev, "car_id", 0)
+        # EventConfig names its fields `kind` and `car`; reading `type`/`car_id` (as Phase 3
+        # did) silently skipped every scripted event in the twin.
+        t = getattr(ev, "kind", "")
+        car_id = getattr(ev, "car", None) or 0
         if t == "car_fault":
             self.inject_fault(car_id)
         elif t == "car_repair":
@@ -251,7 +253,7 @@ class TwinSimulator:
         elif t == "fire_clear":
             self.clear_fire_alarm()
         elif t == "rush":
-            floor = getattr(ev, "floor", 0)
+            floor = getattr(ev, "floor", None) or 0
             count = getattr(ev, "count", 10)
             for _ in range(count):
                 choices = [f for f in range(self.floors) if f != floor]

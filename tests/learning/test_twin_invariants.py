@@ -153,3 +153,21 @@ def test_twin_fire_recall() -> None:
     assert sim.hall_calls_blocked is False
     for car in sim.cars:
         assert car.fire_mode is False
+
+
+def test_scenario_events_fire_in_the_twin() -> None:
+    """Regression: the twin read `ev.type`/`ev.car_id` and never applied any event."""
+    from elevator_mas.config import ScenarioConfig
+    from elevator_mas.learning.twin.state import TwinSimulator
+
+    cfg = ScenarioConfig.load("fire_emergency")
+    fire = next(e for e in cfg.events if e.kind == "fire_alarm")
+    clear = next(e for e in cfg.events if e.kind == "fire_clear")
+    sim = TwinSimulator(config=cfg, seed=1)
+    while sim.tick < fire.tick:
+        sim._step_tick()
+    assert sim.hall_calls_blocked
+    assert all(c.fire_mode for c in sim.cars)
+    while sim.tick < clear.tick:
+        sim._step_tick()
+    assert not sim.hall_calls_blocked
