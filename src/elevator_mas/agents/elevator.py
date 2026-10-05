@@ -871,6 +871,10 @@ class ElevatorAgent(CommunicatingAgent):
         self.planned_stops = []
         self.park_target = None
         self._target_floor = lobby if self.floor != lobby else None
+        # Abandon any partially travelled floor: a stale move timer would otherwise make the
+        # car count as "moving" once a new target appears after the fire clears, while its
+        # doors are cycling at the lobby (a safety-invariant violation found in Phase 4).
+        self._move_timer = 0
         self.needs_replan = False
 
     def hold_doors_open(self) -> None:
@@ -945,6 +949,8 @@ class ElevatorAgent(CommunicatingAgent):
         self.state = CarState.IDLE
         self.door_state = DoorState.CLOSED
         self._door_timer = 0
+        self._target_floor = None
+        self._move_timer = 0
         self.needs_replan = True
 
     # ------------------------------------------------------------------ reporting
