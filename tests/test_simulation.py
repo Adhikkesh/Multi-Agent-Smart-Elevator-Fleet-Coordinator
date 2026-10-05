@@ -16,10 +16,22 @@ from elevator_mas.sim import run_scenario
 from elevator_mas.strategies import strategy_names
 
 
+def runnable_strategies() -> list[str]:
+    """Every registered strategy whose model (if it needs one) is present.
+
+    Learned strategies whose ONNX model has not been trained yet (e.g. ``liftzero_ppo`` before
+    the Kaggle run) are reported unavailable by the registry and are skipped here.
+    """
+    from elevator_mas.learning.lift.bidder import strategy_availability
+    from elevator_mas.strategies import get_strategy
+
+    return [n for n in strategy_names() if strategy_availability(get_strategy(n))[0]]
+
+
 class TestInvariants:
     """Properties that must hold at every tick of every run."""
 
-    @pytest.mark.parametrize("strategy", strategy_names())
+    @pytest.mark.parametrize("strategy", runnable_strategies())
     def test_no_violation_in_any_strategy(
         self, small_config: ScenarioConfig, strategy: str
     ) -> None:
@@ -95,7 +107,7 @@ class TestNoStarvation:
         )
         assert result.violations == []
 
-    @pytest.mark.parametrize("strategy", strategy_names())
+    @pytest.mark.parametrize("strategy", runnable_strategies())
     def test_no_starvation_under_any_strategy(self, strategy: str) -> None:
         """Even the reflex baseline must not strand anybody."""
         config = ScenarioConfig(

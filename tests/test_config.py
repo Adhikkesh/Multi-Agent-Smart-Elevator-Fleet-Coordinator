@@ -82,6 +82,8 @@ class TestStrategies:
             "full",
             "liftzero_bc",
             "liftzero_bc_cnp",
+            "liftzero_ppo",
+            "liftzero_ppo_cnp",
         ]
 
     def test_the_full_strategy_enables_everything(self) -> None:
