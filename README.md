@@ -27,9 +27,28 @@ uv run elevator serve   # → http://localhost:8000
 | `uv run elevator run --scenario demo_story --csv reports/demo.csv` | Headless run, exports per-tick metrics. |
 | `uv run elevator bench` | Strategies x scenarios x seeds benchmark → `reports/*.csv` + PNG charts. |
 | `uv run elevator scenarios` | List the bundled scenarios. |
+| `uv run elevator learn record` | Harvest expert (teacher) decisions into `.npz` shards. |
+| `uv run elevator lift --help` | LiftZero: train-bc, eval-offline, export, bench-infer, eval-sim, dagger, card. |
 | `uv run pytest` | Full test suite. |
 | `uv run pytest --cov` | Test suite with coverage of the core logic. |
 | `uv run ruff check .` | Lint. |
+
+## LiftZero — the learned bidder (Phase 4+)
+
+Each car can price Contract Net calls with **LiftZero**, a 0.24 M-parameter set-Transformer
+trained by imitating the A\* bidder (behaviour cloning + DAgger) and shipped as an ONNX
+model that runs on CPU without PyTorch:
+
+```bash
+uv run elevator run --scenario morning_up_peak --strategy liftzero_bc   # learned bids
+uv run elevator lift card                                              # model card
+uv run elevator lift bench-infer                                       # ~0.3 ms / decision
+uv run elevator lift eval-sim --strategy liftzero_bc --strategy full --n 20
+```
+
+Training needs the optional groups: `uv sync --group learn --group lift-train`, then
+`uv run elevator lift train-bc --preset smoke` (or `scripts/reproduce_phase4.sh` for the
+whole smoke pipeline). See [`docs/lift/PHASE4_IMITATION.md`](docs/lift/PHASE4_IMITATION.md).
 
 ## The dashboard: LiftZero Control Room (Phase 2)
 
@@ -46,6 +65,8 @@ See [`docs/UI.md`](docs/UI.md) and [`frontend/README.md`](frontend/README.md) fo
 
 ## Documentation
 
+- [`docs/lift/PHASE4_IMITATION.md`](docs/lift/PHASE4_IMITATION.md) — the learned bidder: network, losses, DAgger, results; [`docs/lift/MODEL_CARD.md`](docs/lift/MODEL_CARD.md).
+- [`docs/LEARNING_ENV.md`](docs/LEARNING_ENV.md) — Phase 3 feature schema, expert recorder, twin and Gym environments.
 - [`docs/UI.md`](docs/UI.md) — LiftZero Control Room React UI architecture, features, bundle metrics, and test coverage.
 - [`docs/DESIGN.md`](docs/DESIGN.md) — PEAS, environment analysis, state-space
   formulation, algorithms with complexity and the heuristic admissibility/consistency
@@ -69,10 +90,13 @@ src/elevator_mas/
   strategies/      pluggable dispatch strategies (registry pattern)
   traffic/         Poisson arrival generator and traffic-pattern profiles
   rules/           forward-chaining production rules for safety
+  learning/        feature schema, expert recorder, twin simulator, Gym envs (Phase 3)
+  learning/lift/   LiftZero network, BC/DAgger training, ONNX runtime, learned bidder
   metrics.py       metric definitions and aggregation
   sim/             headless runner and the benchmark harness
   api/             FastAPI REST + WebSocket streaming
   web/             single-page vanilla HTML/CSS/JS + Canvas dashboard
-configs/scenarios/ *.yaml
+configs/scenarios/ *.yaml        configs/learning/ regimes + training presets
+models/            shipped ONNX models + model cards
 tests/ docs/ reports/
 ```

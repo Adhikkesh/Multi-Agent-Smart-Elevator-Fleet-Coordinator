@@ -1,13 +1,15 @@
 # Testing and results
 
 ```bash
-uv run pytest                 # 200 tests, ~15 s
+uv run pytest                 # 432 tests (incl. slow), ~2.5 min; -m 'not slow' for a quick run
 uv run pytest --cov           # coverage of the core logic
 uv run elevator verify        # run every scenario, assert the invariants
 uv run elevator bench         # regenerate reports/
 ```
 
-**200 tests pass. Coverage of the package is 96 %** (target was 85 %).
+**432 Python tests pass** (Phase 1–2: 253 → Phase 4: 432) **and 66 Vitest tests.** Coverage of the core package is 96 %; of `learning.lift` 90 % (targets 85 %).
+
+Fire-recall regression: `tests/test_fire_recall_regression.py` (6) pins a Phase 1 safety bug found by the Phase 4 test matrix (see `docs/lift/PHASE4_IMITATION.md` §9).
 
 ---
 
@@ -116,6 +118,33 @@ trajectories and an identical message log; different seeds ⇒ different runs).
   genuine, non-empty images.
 - `tests/test_config.py` (17): schema validation, the strategy registry, domain invariants
   and the metric helpers.
+
+### 1.7 Learning environment — `tests/learning/` (54 tests, Phase 3 + Phase 4 fixes)
+
+Feature schema v2 (incl. the four public cost weights), encoder truth tables and bounds
+(Hypothesis), recorder shards (teacher/source/executed arrays, finite sentinels, labels =
+argmin of teacher bids, split codes by run seed, shadow-bid labelling for DAgger), the
+hook-neutrality check, twin invariants, and the real-backend evaluation path.
+
+### 1.8 LiftZero learned bidder — `tests/lift/` (133 tests, Phase 4)
+
+| file | tests | what it proves |
+| --- | --- | --- |
+| `test_model.py` | 22 | parameter budget 0.2–0.4 M; permutation **equivariance** and **padding invariance** to 1e-5; finite for N = 1…32; ineligible offset; determinism; gradient reaches every parameter (except the Phase 5 value head); tie-break to lowest id |
+| `test_losses.py` | 16 | each loss term against a hand computation; padded/ineligible cars contribute exactly 0 to every term; tie-aware soft targets; hard decisions weigh ×2; trivial decisions carry no ranking loss |
+| `test_augment.py` | 11 | permutation keeps labels; dropout never drops a (tied) winner and keeps ≥ 2 cars; noise only on continuous features of real cars |
+| `test_metrics.py` | 6 | agreement (strict/tie-aware), regret, Kendall τ-b on cases with known answers |
+| `test_train.py` | 8 | the pipeline **overfits** 256 decisions to ≥ 99 %; same seed ⇒ identical first 20 losses; warm-up/cosine schedule; run artefacts; schema-mismatch checkpoints refused |
+| `test_onnx_runtime.py` | 14 | torch ↔ ONNX **parity < 1e-4** at N = 1, 2, 8, 16, 32 and on 1 000 real decisions; card/schema/hash mismatch refuses to load; trimming padding is exact; the runtime path imports neither torch, onnx nor gymnasium |
+| `test_bidder.py` | 10 | the bidder reads **only the public board** (stub whose other attributes raise); `shared` ≡ `per_car`; live CFP-time features ≡ recorded announce-time features; shadow fields only when enabled and never change the run; ineligible cars still REFUSE; β-mixing ≈ β ± 0.05 over 2 000 auctions; DAgger RNG never touches the arrival stream |
+| `test_strategy_api.py` | 6 | registry entries differ from their teacher only in the bidder; `/api/meta` exposes `bidder`/`available`; a missing model ⇒ unavailable (never silently classical); frames stay strict JSON |
+| `test_safety_matrix.py` | 28 | `liftzero_bc` on **all 9 scenarios × 3 seeds**: zero invariant violations every tick, everyone delivered after a drain, no ineligible car ever wins (faults, fire, rush included) |
+| `test_dagger_eval.py` | 12 | DAgger seeds never leak into val/test, rounds use disjoint fresh seeds, shards carry `source` tags and teacher labels; closed-loop runner, paired bootstrap comparison, offline report, CLI |
+
+`tests/test_golden_metrics.py` (25) pins `Metrics.as_dict()` of the four classical strategies
+× 3 scenarios × 2 seeds, generated **before** any Phase 4 engine change: the learned bidders
+are provably additive. Results of the learned bidder are in
+[`docs/lift/PHASE4_IMITATION.md`](lift/PHASE4_IMITATION.md).
 
 ---
 

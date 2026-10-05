@@ -451,6 +451,36 @@ independent of the inference procedure.
 | Forward chaining | O(passes × rules × bindings), fixed point | ≤ 16 passes |
 | **Whole tick** | — | **0.14 ms** (15 floors/4 cars), **4.6 ms** (40 floors/8 cars) |
 
+### 6.7 Learned bidding — LiftZero (Phases 4–6)
+
+From Phase 4 a car can price a call with a neural network instead of the A\* marginal cost
+(strategies `liftzero_bc`, `liftzero_bc_cnp`; details in `docs/lift/PHASE4_IMITATION.md`).
+
+**Where it sits.** Only the *number in the PROPOSE* changes. The car still receives the CFP
+in its inbox, still refuses classically when it cannot serve (out of service, fire mode,
+full — eligibility is never learned), still plans its route with A\*, and the dispatcher
+still awards the lowest bid. The network reads only public information — every car's
+published `CarStatus`, the fleet policy on the board, the CFP content and the static building
+— so it respects the Phase 1 rule that agents never inspect one another.
+
+**Which AIMA agent type is it?** A **learning agent** (§2.4.6) embedded in a utility-based
+car agent:
+
+| learning-agent component | in LiftZero |
+| --- | --- |
+| performance element | the set-Transformer that maps the public board to a bid |
+| critic | the A\* teacher's bid (imitation loss); in Phase 5 the shared team reward |
+| learning element | the behaviour-cloning trainer and the DAgger loop |
+| problem generator | domain randomisation of buildings/traffic/faults, and DAgger's learner-driven rollouts |
+
+**PEAS of the learned bidder.** *P*: agreement with the teacher's award and low regret
+(Phase 4); passenger wait/fairness/energy (Phase 5). *E*: the building as seen through the
+status board. *A*: the bid value in PROPOSE. *S*: CarStatus of every car, fleet policy, CFP.
+
+The environment classification of §3 is unchanged; the learned bidder makes each car's
+pricing *learned* rather than *searched*, which trades the A\* search per CFP for one ~0.3 ms
+network evaluation per CFP (shared by all cars).
+
 ---
 
 ## 7. Tool selection
@@ -466,6 +496,8 @@ independent of the inference procedure.
 | **pandas + matplotlib** | `groupby(...).agg(["mean","std"])` is the benchmark table; matplotlib with the Agg backend writes slide-ready PNGs headlessly. | Hand-rolled statistics — error-prone and unnecessary. |
 | **pytest + coverage** | Parametrised property tests over hundreds of seeded random instances, which is how the A*/heuristic claims are actually established. | `unittest` — far more boilerplate for the same properties. |
 | **ruff** | Lint and format in one fast tool, so style is uniform without argument. | black + flake8 + isort — three tools where one suffices. |
+| **PyTorch (training only)** | Small set-Transformer, own PPO, MPS/CUDA when present, CPU otherwise. Lives in the optional `lift-train` group. | JAX — less familiar to the team; TensorFlow — heavier. |
+| **ONNX + onnxruntime (runtime)** | The simulator and the demo run the learned bidder on CPU without PyTorch installed; ~0.3 ms per decision. The model card pins the feature schema. | Shipping PyTorch to the demo machine — a ~700 MB dependency to run a 1 MB model. |
 
 Two rejections worth stating explicitly, because they are the obvious alternatives for
 this exact project:

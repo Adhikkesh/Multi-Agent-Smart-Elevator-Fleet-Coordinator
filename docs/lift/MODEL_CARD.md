@@ -1,0 +1,330 @@
+# Model card — liftzero_bc_v1 v1
+
+*Generated from `models/liftzero_bc_v1.json` on 2026-10-05 05:31 UTC; git `b3723540ab`.*
+
+## Contract
+
+| Field | Value |
+| --- | --- |
+| Feature schema | v2 (`81ca1ba5ea4e71c7`) |
+| Parameters | 237,575 |
+| ONNX opset | 18 |
+| Inputs | `call`, `cars`, `glob`, `mask`, `eligible` |
+| Outputs | `score`, `aux`, `value`, `attn` |
+| Policy temperature (log) | -1.8926 |
+| ONNX sha256 | `1e2c115ca08c741e…` |
+
+## Architecture
+
+| Hyper-parameter | Value |
+| --- | --- |
+| d_model | 64 |
+| n_layers | 4 |
+| n_heads | 4 |
+| ffn_mult | 4 |
+| dropout | 0.05 |
+| kc | 14 |
+| kcar | 26 |
+| kg | 10 |
+
+## Intended use
+
+Pricing hall calls inside each car's Contract Net bid in the elevator_mas simulator (strategies liftzero_bc / liftzero_bc_cnp). Research and teaching only.
+
+## Training
+
+```json
+{
+  "checkpoint": "runs/bc_dagger_r2_s0_20261005-102249/best.pt",
+  "epoch": 6,
+  "seed": 0,
+  "preset": "bc_dagger_r2",
+  "data_train": [
+    "data/expert/train",
+    "data/dagger/dagger_r1/train",
+    "data/dagger/dagger_r2/train"
+  ],
+  "train_data_hash": "8a695f5f0edaba76",
+  "splits": "by run seed: train 0-7999, val 8000-8499, test 8500+, test_large = 33-40 floors x 7-8 cars",
+  "selected": "DAgger round 2 (best validation closed-loop avg wait)",
+  "dagger_rounds": [
+    {
+      "round": 1,
+      "beta": 0.5,
+      "runs": 1500,
+      "decisions": 1052499,
+      "teacher_fraction": 0.499
+    },
+    {
+      "round": 2,
+      "beta": 0.25,
+      "runs": 1500,
+      "decisions": 941586,
+      "teacher_fraction": 0.25
+    }
+  ],
+  "expert_decisions_recorded": "1.2M train / 120k val / 150k test (about half all-refused, filtered)"
+}
+```
+
+## Metrics
+
+```json
+{
+  "val": {
+    "n": 24981,
+    "n_nontrivial": 24680,
+    "n_hard": 4090,
+    "agree": 88.43921380248989,
+    "agree_nontrivial": 88.29821717990276,
+    "agree_nontrivial_tie": 90.32414910858995,
+    "agree_hard": 63.91198044009781,
+    "agree_hard_tie": 76.13691931540343,
+    "regret_mean": 2.1935844529583157,
+    "regret_median": 0.0,
+    "regret_p95": 4.899997806549072,
+    "rel_regret_mean": 0.1700660444057083,
+    "kendall_tau": 0.8341431452013285
+  },
+  "onnx_parity_max_abs": 5.7220458984375e-06,
+  "offline_shipped": {
+    "val": {
+      "agree_nontrivial": 88.63,
+      "agree_nontrivial_tie": 90.88,
+      "agree_hard": 62.74,
+      "regret_mean": 2.105,
+      "kendall_tau": 0.834
+    },
+    "test": {
+      "agree_nontrivial": 89.9,
+      "agree_nontrivial_tie": 91.69,
+      "agree_hard": 68.08,
+      "regret_mean": 1.767,
+      "kendall_tau": 0.843
+    },
+    "test_large": {
+      "agree_nontrivial": 83.74,
+      "agree_nontrivial_tie": 87.22,
+      "agree_hard": 58.02,
+      "regret_mean": 9.054,
+      "kendall_tau": 0.787
+    }
+  },
+  "bc_seeds_val_agree_nontrivial": {
+    "mean": 88.3,
+    "std": 0.37,
+    "per_seed": [
+      88.6,
+      88.42,
+      87.89
+    ]
+  },
+  "closed_loop_test_regimes": {
+    "liftzero_bc/down_peak/avg_wait": {
+      "learned": 24.05,
+      "teacher": 23.72,
+      "rel_pct": 1.39,
+      "ci95": [
+        -2.05,
+        4.98
+      ],
+      "n": 100
+    },
+    "liftzero_bc/down_peak/p95_wait": {
+      "learned": 69.1,
+      "teacher": 69.39,
+      "rel_pct": -0.42,
+      "ci95": [
+        -4.5,
+        4.0
+      ],
+      "n": 100
+    },
+    "liftzero_bc/interfloor/avg_wait": {
+      "learned": 11.08,
+      "teacher": 10.96,
+      "rel_pct": 1.1,
+      "ci95": [
+        -2.0,
+        4.41
+      ],
+      "n": 100
+    },
+    "liftzero_bc/interfloor/p95_wait": {
+      "learned": 31.02,
+      "teacher": 30.94,
+      "rel_pct": 0.28,
+      "ci95": [
+        -4.87,
+        5.51
+      ],
+      "n": 100
+    },
+    "liftzero_bc/two_way/avg_wait": {
+      "learned": 14.89,
+      "teacher": 14.51,
+      "rel_pct": 2.65,
+      "ci95": [
+        -0.75,
+        6.23
+      ],
+      "n": 100
+    },
+    "liftzero_bc/two_way/p95_wait": {
+      "learned": 45.79,
+      "teacher": 45.23,
+      "rel_pct": 1.23,
+      "ci95": [
+        -3.5,
+        6.57
+      ],
+      "n": 100
+    },
+    "liftzero_bc/up_peak/avg_wait": {
+      "learned": 31.64,
+      "teacher": 29.9,
+      "rel_pct": 5.84,
+      "ci95": [
+        -3.75,
+        17.14
+      ],
+      "n": 100
+    },
+    "liftzero_bc/up_peak/p95_wait": {
+      "learned": 79.65,
+      "teacher": 77.84,
+      "rel_pct": 2.33,
+      "ci95": [
+        -5.1,
+        10.21
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/down_peak/avg_wait": {
+      "learned": 21.88,
+      "teacher": 21.97,
+      "rel_pct": -0.42,
+      "ci95": [
+        -2.61,
+        1.94
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/down_peak/p95_wait": {
+      "learned": 62.76,
+      "teacher": 62.71,
+      "rel_pct": 0.08,
+      "ci95": [
+        -2.37,
+        2.63
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/interfloor/avg_wait": {
+      "learned": 11.65,
+      "teacher": 11.76,
+      "rel_pct": -0.95,
+      "ci95": [
+        -3.04,
+        1.19
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/interfloor/p95_wait": {
+      "learned": 33.97,
+      "teacher": 34.87,
+      "rel_pct": -2.58,
+      "ci95": [
+        -6.65,
+        1.7
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/two_way/avg_wait": {
+      "learned": 14.72,
+      "teacher": 14.5,
+      "rel_pct": 1.51,
+      "ci95": [
+        -0.91,
+        3.94
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/two_way/p95_wait": {
+      "learned": 45.75,
+      "teacher": 44.95,
+      "rel_pct": 1.77,
+      "ci95": [
+        -1.6,
+        5.52
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/up_peak/avg_wait": {
+      "learned": 43.38,
+      "teacher": 42.91,
+      "rel_pct": 1.11,
+      "ci95": [
+        -3.99,
+        6.38
+      ],
+      "n": 100
+    },
+    "liftzero_bc_cnp/up_peak/p95_wait": {
+      "learned": 101.81,
+      "teacher": 100.73,
+      "rel_pct": 1.08,
+      "ci95": [
+        -2.71,
+        4.82
+      ],
+      "n": 100
+    }
+  },
+  "closed_loop_test_safety_violations": 0,
+  "closed_loop_test_runs": 7800,
+  "latency_ms": {
+    "cpu": "Apple M2",
+    "rows": [
+      {
+        "n": 2,
+        "median_ms": 0.12620900088222697,
+        "p95_ms": 0.13408930572040845,
+        "p99_ms": 0.14663417321571615
+      },
+      {
+        "n": 4,
+        "median_ms": 0.14929199824109674,
+        "p95_ms": 0.16210275462071874,
+        "p99_ms": 0.17820924978877883
+      },
+      {
+        "n": 8,
+        "median_ms": 0.18679200002225116,
+        "p95_ms": 0.1979191045393236,
+        "p99_ms": 0.21909233226324432
+      },
+      {
+        "n": 16,
+        "median_ms": 0.2656249998835847,
+        "p95_ms": 0.2818014490912901,
+        "p99_ms": 0.30133633881632704
+      },
+      {
+        "n": 32,
+        "median_ms": 0.4334170007496141,
+        "p95_ms": 0.4558792006719159,
+        "p99_ms": 0.477088425468537
+      }
+    ]
+  }
+}
+```
+
+## Limitations
+
+- Routing (stop sequencing) is still the classical A* planner; only the bid is learned.
+- Eligibility (out of service, fire mode, full) is decided by the classical rules and never by the network.
+- Trained on simulated buildings of 6-32 floors and 2-8 cars from one building family (single lobby at floor 0); 33-40 floors x 7-8 cars is held out as test_large.
+- Priority-passenger weights are not on the public board, so the network cannot see them; the teacher can.
+- Imitation only: the network can at best match the A* teacher (Phase 5 adds RL).
