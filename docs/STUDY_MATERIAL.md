@@ -199,14 +199,17 @@ until that run finishes.
 
 ---
 
-## 7. Look-ahead search: PUCT-MCTS (designed next step)
+## 7. Look-ahead search: PUCT-MCTS (implemented, strategy `liftzero_bc_mcts`)
 
 **PUCT selection**: `a* = argmax_a [ Q(s,a) + c_puct · P(s,a) · √(Σ_b N(s,b)) / (1 + N(s,a)) ]`
 * Q = mean return of action a; P = network prior; N = visit counts; c_puct ≈ 1.25.
 * Exploitation (Q) vs exploration (prior × uncertainty bonus that shrinks with visits).
 * Design: the dispatcher (which sees all bids) searches only contested calls, among cars that
   proposed; hidden destinations are sampled (determinisation for partial observability);
-  ≤ 50 ms budget. **Not implemented** in this submission.
+  ≤ 50 ms budget, anytime. Measured: ~22 simulations to depth 3 in 50 ms; searches ~70 % of
+  auctions, overrides the network on ~15–20 % of them; 0 safety violations. Live in the
+  **LiftZero Brain** page (`/brain`): bids, attention, search visits/Q, and a "Why?" occlusion
+  explanation per decision.
 
 ---
 
@@ -270,9 +273,11 @@ until that run finishes.
 
 ## 9. What we did not finish (say it before they ask)
 
-* PPO training results (code ready; training on Kaggle).
-* PUCT-MCTS search and the React "Brain panel".
-* A faithful fast twin (measured 3.7× faster, 27–126 % wait error) — so RL uses the real simulator.
+* PPO training results (code and tests ready; not trained for this submission).
+* A large-scale evaluation of the look-ahead strategy (it runs and is safe; its benefit over
+  the plain learned bidder is not yet measured on 100 seeds).
+* A faithful fast twin (measured 3.7× faster than the real simulator; its scenario-event bug is
+  fixed) — so RL trains on the real simulator.
 
 ---
 
@@ -290,7 +295,9 @@ Keep a terminal ready in the repo.
 3. **Kavin (1.5 min)** — switch strategy to `liftzero_bc`: the decision trace now shows
    "[LiftZero] net bids…". In the terminal:
    `uv run elevator lift card` (model card) and `uv run elevator lift bench-infer` (≈ 0.2 ms).
-4. **Akash (1.5 min)** — open `reports/viva/fig1_wait_time_comparison.png` and
+4. **Akash (1.5 min)** — open the **LiftZero Brain** page (`/brain`), switch to "LiftZero +
+   look-ahead", press play on Mission Control, then click a decision: show search visits/Q and
+   press **Why?**. Then open `reports/viva/fig1_wait_time_comparison.png` and
    `fig4_learned_vs_teacher.png`; explain the paired test and CIs. Show
    `uv run elevator lift train-ppo --help` and the PPO design.
 5. **All (30 s)** — Story mode for a guided recap, then questions.

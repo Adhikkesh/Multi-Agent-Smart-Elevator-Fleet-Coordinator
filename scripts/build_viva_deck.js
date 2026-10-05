@@ -254,7 +254,7 @@ function numberDot(s, x, y, label, fill = TEAL) {
 // 9 ── MCTS ─────────────────────────────────────────────────────────────────────────
 {
   const s = content("Look-ahead arbitration with PUCT Monte-Carlo tree search",
-    "Presenter: Akash. This is the designed next stage: the dispatcher, which sees all bids, runs a short look-ahead over contested decisions using the network as prior and value. It is not implemented yet — say so clearly and present the design and the formula.");
+    "Presenter: Akash. The dispatcher, which sees all bids, runs a short PUCT look-ahead over contested calls: about 22 simulations to depth 3 inside a 50 ms budget, sampled hidden passengers, cost-greedy rollouts. Demo it live on the Brain page (strategy LiftZero + look-ahead).");
   card(s, 0.6, 1.4, 6.3, 1.7);
   text(s, "Selection rule", { x: 0.85, y: 1.5, w: 5.8, h: 0.4, fontSize: 17, bold: true, color: NAVY });
   text(s, "a* = argmaxₐ [ Q(s,a) + c_puct · P(s,a) · √(Σ_b N(s,b)) / (1 + N(s,a)) ]", { x: 0.85, y: 1.98, w: 5.8, h: 0.9, fontFace: "Cambria Math", fontSize: 16, color: SLATE });
@@ -265,8 +265,8 @@ function numberDot(s, x, y, label, fill = TEAL) {
     "Hard real-time budget: ≤ 50 ms per contested decision",
   ], { x: 0.6, y: 3.35, w: 6.3, h: 3.2, fontSize: 15 });
   card(s, 7.4, 1.4, 5.3, 2.0, TINT2);
-  text(s, "Status: designed, not yet implemented", { x: 7.65, y: 1.5, w: 4.8, h: 0.4, fontSize: 17, bold: true, color: TEAL });
-  text(s, "The reflex learner (bids) and the deliberative planner (search) form the AIMA contrast between reflex and model-based agents in one system.", { x: 7.65, y: 1.95, w: 4.8, h: 1.35, fontSize: 15, valign: "top" });
+  text(s, "Implemented: live in the Brain panel", { x: 7.65, y: 1.5, w: 4.8, h: 0.4, fontSize: 17, bold: true, color: TEAL });
+  text(s, "~22 simulations to depth 3 in a 50 ms budget; searches ~70 % of auctions and overrides the network on ~15–20 % of them, with zero safety violations.", { x: 7.65, y: 1.95, w: 4.8, h: 1.35, fontSize: 15, valign: "top" });
   const why = [["Reflex", "learned bid: 0.19 ms, no look-ahead"], ["Deliberative", "search: simulates the next minute"], ["Hybrid", "search only when bids are close"]];
   why.forEach(([h, d], i) => {
     const y = 3.75 + i * 0.95;
@@ -286,7 +286,7 @@ function numberDot(s, x, y, label, fill = TEAL) {
     ["Agents", "agent graph, FIPA-ACL swimlanes, PEAS inspector"],
     ["Search lab", "BFS / UCS / Greedy / A* step-through, SA and minimax demos"],
     ["Experiments", "multi-seed benchmarks and side-by-side compare mode"],
-    ["Story mode", "guided 10-beat walkthrough for examiners"],
+    ["LiftZero Brain", "live network bids, attention, search visits and Q, 'Why?' saliency"],
   ];
   tabs.forEach(([h, d], i) => {
     const col = i % 3, row = Math.floor(i / 3);
@@ -328,7 +328,7 @@ function numberDot(s, x, y, label, fill = TEAL) {
     ["Adhikkesh", "CB.SC.U4CSE23101", ["Mesa 3 multi-agent engine", "FIPA-ACL + Contract Net", "Kinematics, A* routing, safety", "Slides 1–5, demo launch"]],
     ["Sisr Reddy", "CB.SC.U4CSE23129", ["React 19 Mission Control", "60 FPS canvas, auction theatre", "Compare & story modes", "Slide 10, live UI demo"]],
     ["Kavin Karthic", "CB.SC.U4CSE23161", ["Feature schema, expert recorder", "Set-Transformer, BC + DAgger", "ONNX runtime, learned bidder", "Slides 6–7, CLI demo"]],
-    ["Akash", "CB.SC.U4CSE23162", ["Cooperative PPO (CTDE)", "Search design (PUCT-MCTS)", "Benchmarks & statistics", "Slides 8–9, 11–12"]],
+    ["Akash", "CB.SC.U4CSE23162", ["Cooperative PPO (CTDE)", "PUCT-MCTS look-ahead", "Benchmarks & statistics", "Slides 8–9, 11–12"]],
   ];
   team.forEach(([name, reg, items], i) => {
     const x = 0.6 + i * 3.08;
@@ -354,8 +354,8 @@ function numberDot(s, x, y, label, fill = TEAL) {
   ], { x: 0.6, y: 3.65, w: 5.9, h: 2.6, fontSize: 15 });
   text(s, "Next steps", { x: 6.9, y: 3.15, w: 5.8, h: 0.45, fontSize: 18, bold: true, color: NAVY });
   bullets(s, [
-    "Complete PPO training on GPU and test against the teacher",
-    "Implement PUCT look-ahead for contested calls",
+    "Complete PPO training (code and tests ready) and compare with the teacher",
+    "Tune the look-ahead budget; value-head leaves once PPO is trained",
     "Real building traces and multi-lobby buildings",
   ], { x: 6.9, y: 3.65, w: 5.8, h: 2.0, fontSize: 15 });
   card(s, 6.9, 5.75, 5.8, 0.85, TINT2);
