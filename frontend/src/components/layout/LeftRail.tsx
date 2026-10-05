@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  BrainCircuit,
   Cpu,
   ExternalLink,
   Flame,
@@ -28,6 +29,7 @@ export const LeftRail: React.FC = () => {
     { label: "Agents", path: "/agents", icon: Network },
     { label: "Algorithm Lab", path: "/lab", icon: Cpu },
     { label: "Experiments", path: "/experiments", icon: LineChart },
+    { label: "LiftZero Brain", path: "/brain", icon: BrainCircuit },
     { label: "Theory", path: "/theory", icon: BookOpen },
     { label: "Story Mode", path: "/story", icon: Sparkles },
   ];

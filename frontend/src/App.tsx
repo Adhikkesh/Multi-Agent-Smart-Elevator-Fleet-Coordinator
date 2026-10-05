@@ -13,6 +13,7 @@ import { LabPage } from "./features/lab/LabPage";
 import { MissionControlPage } from "./features/mission-control/MissionControlPage";
 import { StoryPage } from "./features/story/StoryPage";
 import { TheoryPage } from "./features/theory/TheoryPage";
+import { BrainPage } from "./features/brain/BrainPage";
 import { connectWebSocket, disconnectWebSocket } from "./live/socket";
 import { useUiStore } from "./store/uiStore";
 
@@ -126,6 +127,7 @@ const AppShell: React.FC = () => {
             <Route path="/experiments" element={<ExperimentsPage />} />
             <Route path="/experiments/compare" element={<ExperimentsPage />} />
             <Route path="/theory" element={<TheoryPage />} />
+            <Route path="/brain" element={<BrainPage />} />
             <Route path="/story" element={<StoryPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

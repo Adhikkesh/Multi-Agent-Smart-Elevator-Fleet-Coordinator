@@ -2,6 +2,13 @@ import {
   AnnealingLabSchema,
   BenchmarkSchema,
   BoardResponseSchema,
+  type BrainConfigUpdate,
+  BrainDecisionsSchema,
+  type BrainDecision,
+  type BrainResponse,
+  BrainSchema,
+  ExplainSchema,
+  type ExplainResponse,
   MetaSchema,
   MinimaxLabSchema,
   RunResponseSchema,
@@ -60,6 +67,30 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  async brain(): Promise<BrainResponse> {
+    return BrainSchema.parse(await request<unknown>("/api/brain"));
+  },
+
+  async brainDecisions(limit = 50): Promise<BrainDecision[]> {
+    const raw = await request<unknown>(`/api/brain/decisions?limit=${limit}`);
+    return BrainDecisionsSchema.parse(raw).decisions;
+  },
+
+  async setBrainConfig(update: BrainConfigUpdate): Promise<unknown> {
+    return request<unknown>("/api/brain/config", {
+      method: "POST",
+      body: JSON.stringify(update),
+    });
+  },
+
+  async explain(conversationId: string | number): Promise<ExplainResponse> {
+    const raw = await request<unknown>("/api/brain/explain", {
+      method: "POST",
+      body: JSON.stringify({ conversation_id: conversationId }),
+    });
+    return ExplainSchema.parse(raw);
+  },
+
   async getState(): Promise<Snapshot> {
     return request<Snapshot>("/api/state");
   },

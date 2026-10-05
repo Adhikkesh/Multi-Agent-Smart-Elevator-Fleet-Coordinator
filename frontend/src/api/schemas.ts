@@ -233,3 +233,122 @@ export function validateSnapshotShape(data: unknown): boolean {
     d.building !== null
   );
 }
+
+// ---------------------------------------------------------------- Brain panel (Phase 6)
+
+export const BrainCandidateSchema = z.object({
+  car_id: z.number(),
+  refused: z.boolean(),
+  reason: z.string().nullable(),
+  bid: z.number().nullable(),
+  wait: z.number().nullable(),
+  ride: z.number().nullable(),
+  crowding: z.number().nullable(),
+  energy: z.number().nullable(),
+  net_score: z.number().nullable(),
+  attention: z.number().nullable(),
+  teacher_bid: z.number().nullable(),
+});
+
+export const SearchResultSchema = z.object({
+  chosen: z.number(),
+  net_choice: z.number(),
+  candidates: z.array(z.number()),
+  prior: z.array(z.number()),
+  visits: z.array(z.number()),
+  q: z.array(z.number()),
+  root_value: z.number(),
+  sims_done: z.number(),
+  depth_max: z.number(),
+  time_ms: z.number(),
+  nn_ms: z.number(),
+  leaf: z.string(),
+  overridden: z.boolean(),
+  fallback: z.boolean(),
+});
+
+export const BrainDecisionSchema = z.object({
+  tick: z.number(),
+  conversation_id: z.union([z.string(), z.number()]),
+  call: z.object({ floor: z.number(), direction: z.string() }),
+  candidates: z.array(BrainCandidateSchema),
+  chosen: z.number(),
+  net_choice: z.number().nullable(),
+  teacher_choice: z.number().nullable(),
+  search: SearchResultSchema.nullable(),
+});
+
+export const BrainDecisionsSchema = z.object({ decisions: z.array(BrainDecisionSchema) });
+
+export const BrainSchema = z.object({
+  available: z.boolean(),
+  strategies: z.array(
+    z.object({
+      name: z.string(),
+      label: z.string(),
+      available: z.boolean(),
+      reason: z.string().optional(),
+      arbiter: z.string().optional(),
+    }),
+  ),
+  active: z.object({
+    strategy: z.string(),
+    label: z.string(),
+    bidder: z.string(),
+    arbiter: z.string(),
+    model: z
+      .object({
+        name: z.string(),
+        version: z.string(),
+        param_count: z.number(),
+        feature_version: z.number(),
+      })
+      .nullable(),
+    search: z
+      .object({
+        sims: z.number(),
+        time_budget_ms: z.number(),
+        tau_margin: z.number(),
+        top_k: z.number(),
+        horizon: z.number(),
+        leaf: z.string(),
+      })
+      .nullable(),
+    shadow_teacher: z.boolean(),
+  }),
+  stats: z
+    .object({
+      decisions: z.number(),
+      agree_net_pct: z.number(),
+      agree_teacher_pct: z.number().nullable(),
+      searched_pct: z.number(),
+      overridden_pct: z.number(),
+      search_ms_mean: z.number().nullable(),
+      search_ms_p95: z.number().nullable(),
+    })
+    .nullable(),
+});
+
+export const ExplainSchema = z.object({
+  conversation_id: z.union([z.string(), z.number()]),
+  method: z.string(),
+  groups: z.array(
+    z.object({
+      group: z.string(),
+      delta_score_chosen: z.number(),
+      delta_score_runner_up: z.number().nullable(),
+      flips_decision: z.boolean(),
+    }),
+  ),
+});
+
+export type BrainResponse = z.infer<typeof BrainSchema>;
+export type BrainDecision = z.infer<typeof BrainDecisionSchema>;
+export type ExplainResponse = z.infer<typeof ExplainSchema>;
+export type BrainConfigUpdate = {
+  sims?: number;
+  time_budget_ms?: number;
+  tau_margin?: number;
+  top_k?: number;
+  shadow_teacher?: boolean;
+};
