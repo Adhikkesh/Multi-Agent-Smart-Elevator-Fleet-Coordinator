@@ -1,187 +1,118 @@
-# Five-minute live demo
+# Live demo script (≈ 7 minutes)
 
-**Before you start**
+The demo is marked under **Review 2: Multi-Agent Execution & Interaction** and **Demo Quality
+& Testing Scenarios**. Every step below names who does it, what to click, and what to say.
+
+## Before the review (10 minutes earlier)
 
 ```bash
-uv sync                                    # once, beforehand
-uv run elevator serve                      # → http://localhost:8000
+cd Multi-Agent-Smart-Elevator-Fleet-Coordinator
+uv sync                                   # once; installs Python 3.12 + packages
+uv run elevator verify                    # every scenario, safety check — expect "0 violations"
+uv run elevator serve                     # keep this terminal open
 ```
 
-Open the browser **full screen**. You can present either via **Guided Story Mode** (`/story`) or the **Free-Form Mission Control** dashboard:
+* Open **http://localhost:8000** in Chrome, full screen (`F11` / `Ctrl+Cmd+F`).
+* Press `T` if you want the light theme for the projector.
+* Keep a second terminal open in the project folder for step 6.
+* **Keyboard:** `Space` play/pause · `→` step 1 tick · `Shift+→` step 10 · `F` fire alarm ·
+  `B` break car 1 · `R` reset · `1`–`6` switch pages · `?` all shortcuts.
 
-### Option A: Guided Story Mode (`/story`)
-Navigate to `http://localhost:8000/story` or press `G` from anywhere:
-- Full-screen presentation deck that syncs 10 structured acts with live simulation actions.
-- Use `→` (Next Beat) and `←` (Previous Beat), or click **Execute Real Action** buttons to inject scripted rushes, car breakdowns, and fire evacuations.
-- Press `Esc` to return to Mission Control.
+## 1. Mission Control — the building and the agents (Adhikkesh, 1.5 min)
 
-### Option B: Free-Form Mission Control (`/`)
-The scenario is scripted on `demo_story`, so the beats land at the same ticks every time (seed 7):
+1. Top bar: **Scenario** = `morning_up_peak`, **Strategy** = `full`, press **Play** (speed
+   about 10×).
+2. Point at the **Building & Shafts** panel: "15 floors, 4 cars. Each car is an autonomous
+   agent; the up/down arrows are hall calls raised by floor agents; the dots are waiting
+   passengers."
+3. Point at the **KPI strip**: average wait, p95, long waits, throughput, energy, messages per
+   call — "this is our performance measure from the PEAS."
+4. **Contract Net Auction** panel: "Every hall call is auctioned. The dispatcher sends a CFP,
+   each car bids the extra cost of adding the call to its A\*-planned route, the lowest bid
+   wins." Read the sentence that explains why the winner won (cost, its biggest component,
+   margin over the next car).
+5. **Live Message Bus**: "These are real FIPA-ACL messages — REQUEST, CFP, PROPOSE, REFUSE,
+   ACCEPT_PROPOSAL, REJECT_PROPOSAL, INFORM. Agents never call each other directly."
 
-| Tick | Event |
-| --- | --- |
-| 95 | 12 passengers surge into the lobby |
-| 160 | car 1 breaks down |
-| 235 | car 1 is repaired |
-| 265 | fire alarm |
-| 310 | alarm cleared |
+## 2. Faults and fire — safety rules in action (Sisr Reddy, 1.5 min)
 
-Set **Speed** to about 10× — 330 simulated seconds then take roughly half a minute of real
-time per segment, which fits the five minutes with room to talk.
+1. In **Disturbance & Chaos Injection**, choose **Car 1**, press **Break Car** (or key `B`).
+   "Car 1 goes out of service; rule R4 fires; its calls are re-auctioned to the other cars —
+   watch it refuse new CFPs in the message bus."
+2. Press **Repair Car**.
+3. Press **Fire Alarm** (or key `F`). "The Safety agent's forward-chaining rules fire: R1
+   recalls every car to the lobby, R2 holds the doors open, R3 blocks hall calls." Point at
+   the **Safety Agent** card listing the fired rules.
+4. Press **Clear Alarm** — "R7 restores normal service." The invariants badge stays green
+   ("Invariants OK"): no car ever moves with its doors open.
 
----
+## 3. Agents page — multi-agent interaction (Sisr Reddy, 1 min)
 
-## 0:00 — 0:40 · The building and the agents
+1. Press `2` (Agents).
+2. **Multi-Agent Communication Network**: "Six agent types; messages pulse along the edges."
+3. Click **Replay Last Auction Conversation**: the **Protocol Sequence Diagram** shows one
+   full Contract Net round message by message.
+4. Scroll to **Shared Status Board**: "the blackboard each car publishes its status to."
 
-> "This is a 15-floor building with four lift cars. Every moving part is an autonomous
-> agent, and each one is a different AIMA agent type."
+## 4. Algorithm Lab — search strategy (Akash, 1.5 min)
 
-- Point at the shafts: four cars, colour-coded. Arrows on the left are hall calls; a call
-  turns the colour of the car that won it.
-- Open the **Agent inspector** (right) and pick `car-0`. Read out the chip: *goal-based +
-  utility-based agent*, and its PEAS.
-- Switch to `safety` — *knowledge-based agent*, showing its seven production rules.
-- Switch to `monitor` — *learning agent*.
+1. Press `3` (Algorithm Lab), tab **1. Car Routing (BFS/UCS/Greedy/A\*)**, click
+   **Run on Live Car**.
+2. "The same live routing problem solved by four algorithms. BFS and UCS find the optimal
+   route but expand many nodes; greedy is fast but its route costs far more; **A\* finds the
+   optimal route expanding the fewest nodes** — because our heuristic is admissible and
+   consistent." (Typical live numbers: A\* 15 nodes, UCS 40, BFS 158; greedy cost 512 vs
+   237.)
+3. Scroll to **A\* Step-Through Search Trace**, press **Play**: the open and closed lists
+   change node by node.
+4. Tabs **2. Assignment (Simulated Annealing)** and **3. Adversarial Parking
+   (Minimax/Alpha-Beta)**: "annealing re-assigns calls fleet-wide; minimax with alpha-beta
+   decides where idle cars wait — same value with fewer nodes."
 
-> "Six agent types, and the dashboard reads the PEAS straight out of the code, so the
-> documentation cannot drift from the implementation."
+## 5. Experiments — testing and comparison (Akash, 1 min)
 
-**Press Play.**
+1. Press `4` (Experiments) → **Compare Mode**: compare `nearest_car` against `full` on
+   `morning_up_peak`. "Same scenario, same seed, same traffic pattern — the difference is the coordination.
+   Nearest car bunches cars and lets the wait grow; the multi-agent system keeps it low."
+2. Optionally run the **Monte-Carlo Benchmark** with 3 seeds.
 
----
+## 6. Testing scenarios in the terminal (Kavin Karthic, 1 min)
 
-## 0:40 — 1:40 · Contract Net in action
+In the second terminal:
 
-> "Nobody is in charge of the fleet. When a hall button is pressed, the call is
-> *auctioned*."
+```bash
+uv run elevator scenarios                                   # the 9 scenarios + strategies
+uv run elevator run --scenario car_breakdown                # one scenario, full metric summary
+uv run pytest -m "not slow" -q                              # the fast test suite (≈ 1 min)
+```
 
-- Watch the **Contract Net auction** panel. Each round shows all four cars bidding, the
-  cost split into **W**ait / **R**ide / **C**rowding / **E**nergy, and the winner in green.
-- Point out a `REFUSE` if one appears (a full car).
+Say: "Nine scenarios — peaks, lunch, faults, fire, priority, a 40-floor stress test. Every
+one delivers everyone with zero safety violations, and 523 automated tests check search
+optimality, the protocol and the safety invariants on hundreds of random cases."
 
-> "A car's bid is the *marginal* cost of inserting the call into the plan its own A* search
-> just produced — so a car already passing the floor bids almost nothing, and one that
-> would have to reverse bids a lot. That is exactly the information needed to choose well."
+## 7. Theory page and the extension (Kavin Karthic, 1 min)
 
-- Scroll the **Message log**: colour-coded `REQUEST → CFP → PROPOSE → ACCEPT/REJECT →
-  INFORM`. That is FIPA-ACL, threaded by conversation id.
-
-> "Around twelve messages per call, and every one is logged and auditable."
-
----
-
-## 1:40 — 2:20 · Learning, and the lobby surge
-
-At **t ≈ 95** twelve people appear in the lobby. (If you are running behind, press
-**Lobby rush** yourself.)
-
-- Point at the **Traffic monitor** panel: *Detected: up_peak*, with the reason — "85 % of
-  trips start at the lobby" — next to the ground truth.
-
-> "The agents are never told the arrival rates. This agent estimates them online with an
-> EWMA and classifies the regime with a small rule base. When it decides this is a morning
-> rush it retunes the fleet's cost weights and tells the dispatcher to park spare cars at
-> the lobby — so a learning agent's output here is a *different dispatching policy*, not a
-> number on a dashboard."
-
-- Watch the **Average wait over time** chart absorb the surge and recover.
-
----
-
-## 2:20 — 3:10 · A car breaks down
-
-At **t ≈ 160** car 1 fails. (Or press **Inject fault** with Car 1 selected.)
-
-- The car greys out and shows `OOS`.
-- **Safety rules fired** shows `R4_car_fault_out_of_service` with its effect: *"car 1 out of
-  service; N call(s) re-auctioned"*.
-- The **message log** shows a `FAILURE`, then fresh `CFP`s for the released calls.
-
-> "The SafetyAgent is knowledge-based: it forward-chains over declarative rules. Rule R4
-> fires, the car stops at the next floor, its riders are turned out and re-queued **keeping
-> their original arrival time** — so the metrics cannot flatter a failure — and its calls
-> are re-auctioned with raised urgency. No central plan had to be repaired: the remaining
-> three cars simply bid on the work."
-
-At **t ≈ 235** the car returns to service.
-
----
-
-## 3:10 — 4:00 · Fire alarm
-
-At **t ≈ 265** the alarm sounds. (Or press **Fire alarm**.)
-
-- The building tints red with a banner.
-- Every car abandons its calls and runs to the lobby.
-- **Rules fired** shows `R1_fire_recall`, `R2_fire_doors_open`, `R3_block_hall_calls`.
-
-> "Safety overrides coordination. The SafetyAgent runs before the dispatcher in every tick,
-> so once the alarm is raised no auction can award a call at all. Hall calls are blocked,
-> the cars recall, and their doors are held open at the lobby. Salience makes that priority
-> explicit — fire recall is 100, overload is 60 — rather than leaving it implicit in the
-> order of some `if` statements."
-
-At **t ≈ 310** clear it: `R7_fire_cleared` fires and normal service resumes.
-
-> "The same rules are written as Horn clauses in `docs/safety_rules.pl`, and Prolog derives
-> the same conclusions — the knowledge is independent of the inference engine."
-
----
-
-## 4:00 — 4:40 · Search Lab
-
-Click **Search Lab**.
-
-> "This takes the routing problem out of the car that is running right now and gives the
-> identical instance to all four search algorithms."
-
-Read the table:
-
-- **BFS, UCS and A\*** all reach the same optimal cost.
-- **A\*** expands far fewer nodes than UCS — typically 40–60 % fewer.
-- **Greedy** is fastest but returns a worse route.
-
-> "That gap is the payoff of an admissible, consistent heuristic — proved in the design
-> document and asserted in the tests over two hundred random instances. BFS optimises the
-> *number* of stops, which is the wrong objective when the step costs differ."
-
-Point at the two lower panels:
-
-- **Simulated annealing vs hill climbing** — the jagged blue line accepts worse moves to
-  escape local optima; the green running-best never worsens; hill climbing flattens early.
-- **Minimax vs alpha-beta** — identical value, roughly half the nodes. *"The dispatcher is
-  MAX choosing where to park; nature is MIN choosing the worst next call floor. The value
-  is a worst-case guarantee, not an average."*
-
----
-
-## 4:40 — 5:00 · Benchmark and close
-
-Click **Benchmark**. If time is short, show the pre-generated
-`reports/benchmark_avg_wait.png` instead of running it live.
-
-> "Four strategies from a pure reflex baseline up to the full agent system, on four traffic
-> regimes, several seeds each, same seeds for every strategy. In the peak regimes the full
-> system cuts average wait by about 70 % against the nearest-car baseline and nearly
-> eliminates waits over a minute. In light traffic every strategy is equivalent — there is
-> nothing to coordinate when no car is ever contended for, and we report that honestly
-> rather than hiding it."
-
-Close on the **Theory** tab:
-
-> "PEAS per agent, the environment classification with justifications, the rule base and
-> the architecture — all read live from the running system. A hundred and eighty-two tests
-> pass, including that A* matches uniform-cost search on two hundred random instances, that
-> no passenger is ever starved, and that the same seed reproduces a run exactly."
-
----
+1. Press `5` (Theory): system PEAS, each agent's PEAS (tabs), the environment classification
+   table — "the Review 1 analysis is built into the product."
+2. Optional — press `6` (LiftZero Brain), click **LiftZero (imitation)**, go back to Mission
+   Control and press Play for a few seconds, then return: "our extension — a neural network
+   that learned to imitate the A\* bid. Each decision shows the network's bids and attention;
+   **Why?** shows which features drove it."
+3. Press `R` to reset. Hand over to questions.
 
 ## If something goes wrong
 
 | Problem | Fix |
 | --- | --- |
-| Nothing animates | Check the pill top-right. If it says *disconnected* the page still polls over REST, so it keeps working — just less smoothly. Reload. |
-| The demo drifts off the script | Every event has a button: **Inject fault**, **Fire alarm**, **Lobby rush**. Trigger them by hand. |
-| You run out of time | Skip the Benchmark tab and show `reports/benchmark_avg_wait.png`. |
-| A question needs a still frame | **Pause**, then **Step** one tick at a time. |
-| You need to restart cleanly | Set scenario `demo_story`, seed 7, press **Reset**. |
+| Page does not load | check the server terminal is running; reload the page |
+| Port 8000 busy | `uv run elevator serve --port 8001` and open http://localhost:8001 |
+| Simulation looks stuck | press **Reset** (`R`), then **Play** |
+| No internet | everything runs offline — no CDN, no external services |
+| Laptop fails entirely | screenshots in `docs/img/ui/` and slides 12, 13, 15, 17 show every page |
+| Terminal fallback | `uv run elevator run --scenario demo_story` prints the full metrics |
+
+## Optional: guided Story Mode
+
+Press `P` (or open http://localhost:8000/story) for a 10-step guided tour that triggers the
+surge, the breakdown and the fire automatically; use `→` / `←` to move between steps and
+`Esc` to leave.

@@ -355,7 +355,7 @@ Above 10 pending stops the search is abandoned for a **LOOK sweep** (serve every
 in the current direction, reverse, sweep back). This is AIMA §3.6's bounded rationality:
 the optimal computation is not worth its cost at every tick under real-time constraints.
 It is O(n log n) instead of exponential, it is what real controllers do, and it is why
-`stress_scale` (40 floors, 8 cars, a simulated hour) finishes in ~2.5 s.
+`stress_scale` (40 floors, 8 cars, a simulated hour) finishes in under 4 s.
 
 Replanning is **event-driven**, not per tick: a car replans only when its goal set actually
 changes (a call won or cancelled, someone boards or alights, a fault occurs).
@@ -449,7 +449,7 @@ independent of the inference procedure.
 | Hill-climbing parking | O(restarts × iters × M × |demand|) | 6 restarts |
 | Minimax + alpha-beta | O(C(s+m−1, m) · f), pruned in practice | 105 → 47 nodes |
 | Forward chaining | O(passes × rules × bindings), fixed point | ≤ 16 passes |
-| **Whole tick** | — | **0.14 ms** (15 floors/4 cars), **4.6 ms** (40 floors/8 cars) |
+| **Whole tick** | — | **≈0.2 ms** (15 floors/4 cars), **≈1 ms** (40 floors/8 cars) |
 
 ### 6.7 Learned bidding — LiftZero (Phases 4–6)
 
@@ -491,8 +491,8 @@ network evaluation per CFP (shared by all cars).
 | **Mesa 3.x** | The standard Python ABM framework: `Agent`/`Model`, seeded RNG and `DataCollector` for free, and the staged-activation idiom fits the sense→act tick exactly. Being a recognised ABM framework is itself worth marks. | Raw Python classes — would mean re-implementing agent registration, seeding and data collection. SPADE — genuinely FIPA-compliant but needs a running **XMPP server**, which is a hard dependency to demo. JADE — Java, wrong ecosystem. |
 | **FastAPI + uvicorn** | Native WebSocket support for streaming a frame per tick, plus REST for control and automatic validation through the same pydantic models the config uses. | Flask — WebSockets need extra extensions. Django — far too heavy for a single-page dashboard. |
 | **pydantic + PyYAML** | One schema validates the scenario files *and* the API bodies, so a malformed YAML fails at load with a clear message rather than deep inside a run. | `dataclasses` + manual checks — more code, worse errors. |
-| **Vanilla HTML/CSS/JS + Canvas** | No build step at all: clone, `uv sync`, run. Canvas draws 15 shafts at 60 fps trivially, and the interpolation that makes a 1 Hz simulation look smooth is ~20 lines. | React/Vue — a toolchain, `node_modules` and a build step to maintain and to fail during a demo. |
-| **Chart.js, vendored** | Charts without a CDN dependency — the demo works with the network unplugged. | Plotly/D3 — much larger; D3 would need far more code for these charts. |
+| **React 18 + TypeScript + Vite** (Tailwind CSS, Zustand, Zod, Recharts) | A multi-page control room (Mission Control, Agents, Algorithm Lab, Experiments, Theory, Brain) with typed, schema-validated API data. The production bundle is **pre-built and committed**, so running the demo still needs no Node.js — clone, `uv sync`, run. | Vanilla JS (the original Phase 1 dashboard, kept at `/classic`) — fine for one page, unmanageable for six; pygame/Streamlit as below. |
+| **Recharts (bundled)** | Charts without a CDN dependency — the demo works with the network unplugged. | Plotly/D3 — much larger; D3 would need far more code for these charts. |
 | **pandas + matplotlib** | `groupby(...).agg(["mean","std"])` is the benchmark table; matplotlib with the Agg backend writes slide-ready PNGs headlessly. | Hand-rolled statistics — error-prone and unnecessary. |
 | **pytest + coverage** | Parametrised property tests over hundreds of seeded random instances, which is how the A*/heuristic claims are actually established. | `unittest` — far more boilerplate for the same properties. |
 | **ruff** | Lint and format in one fast tool, so style is uniform without argument. | black + flake8 + isort — three tools where one suffices. |
@@ -516,7 +516,7 @@ this exact project:
 Floors, cars, capacity, timings, traffic profile, events, cost weights and planner limits
 all come from YAML. `stress_scale` (40 floors, 8 cars, capacity 12) is **only a
 configuration file** — no code differs from the 15-floor default. It simulates a full hour
-in ~2.5 s, at 4.6 ms per tick.
+in under 4 s (about 1 ms per tick).
 
 What keeps it fast: event-driven replanning (not per tick), the bounded-rationality LOOK
 fallback above 10 stops, retirement of delivered passenger agents (their records stay with

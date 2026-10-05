@@ -9,6 +9,12 @@ properties, state-space search (BFS / UCS / Greedy / A*), local search (hill cli
 simulated annealing), adversarial search (minimax with alpha-beta) and rule-based
 reasoning (forward chaining).
 
+## Case-study review
+
+* **Slides:** [`docs/LiftZero_Viva_Deck.pptx`](docs/LiftZero_Viva_Deck.pptx) (18 slides, mapped to the review rubric) · plan: [`docs/PRESENTATION_PLAN.md`](docs/PRESENTATION_PLAN.md)
+* **Study material:** [`docs/STUDY_MATERIAL.md`](docs/STUDY_MATERIAL.md) — problem statement, PEAS, environment, search, tools, testing, commands, 35 Q&A
+* **Live demo script:** [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md)
+
 ## Quick start
 
 ```bash
@@ -22,7 +28,7 @@ uv run elevator serve   # → http://localhost:8000
 
 | Command | What it does |
 | --- | --- |
-| `uv run elevator serve` | Start the FastAPI + WebSocket server and the 4-tab dashboard. |
+| `uv run elevator serve` | Start the FastAPI + WebSocket server and the dashboard (Mission Control, Agents, Algorithm Lab, Experiments, Theory, Brain, Story). |
 | `uv run elevator run --scenario morning_up_peak` | Headless run, prints the metric summary. |
 | `uv run elevator run --scenario demo_story --csv reports/demo.csv` | Headless run, exports per-tick metrics. |
 | `uv run elevator bench` | Strategies x scenarios x seeds benchmark → `reports/*.csv` + PNG charts. |

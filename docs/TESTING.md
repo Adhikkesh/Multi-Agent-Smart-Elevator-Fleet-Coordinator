@@ -1,13 +1,13 @@
 # Testing and results
 
 ```bash
-uv run pytest                 # 444 tests (incl. slow), ~2.5 min; -m 'not slow' for a quick run
+uv run pytest                 # 451 tests (incl. slow), ~2.5 min; -m 'not slow' for a quick run
 uv run pytest --cov           # coverage of the core logic
 uv run elevator verify        # run every scenario, assert the invariants
 uv run elevator bench         # regenerate reports/
 ```
 
-**444 Python tests pass** (Phase 1–2: 253 → Phase 4: 432 → Phase 5: 444) **and 66 Vitest tests.** Coverage of the core package is 96 %; of `learning.lift` 90 % (targets 85 %).
+**451 Python tests and 72 Vitest tests pass** (523 in total). Coverage of the core package is 96 %; of `learning.lift` 90 % (targets 85 %).
 
 Fire-recall regression: `tests/test_fire_recall_regression.py` (6) pins a Phase 1 safety bug found by the Phase 4 test matrix (see `docs/lift/PHASE4_IMITATION.md` §9).
 
@@ -151,19 +151,20 @@ are provably additive. Results of the learned bidder are in
 ## 2. Scenario results
 
 Every scenario, run to completion and then drained (arrivals off, run on until everyone is
-delivered). **Zero invariant violations anywhere.**
+delivered), regenerated with the current code (`run_scenario(name, drain=True)`).
+**Zero invariant violations anywhere.**
 
-| Scenario | Runtime | Avg wait | P95 | Max | Waits > 60 s | Delivered | Rules fired |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `morning_up_peak` | 0.22 s | 16.0 s | 52.9 s | 59 s | 0.0 % | **135/135** | — |
-| `evening_down_peak` | 0.49 s | 23.3 s | 62.2 s | 109 s | 5.7 % | **158/158** | — |
-| `lunch_two_way` | 0.30 s | 13.4 s | 45.0 s | 69 s | 3.1 % | **127/127** | — |
-| `interfloor_light` | 0.13 s | 9.7 s | 24.4 s | 37 s | 0.0 % | **57/57** | — |
-| `car_breakdown` | 0.22 s | 11.1 s | 38.5 s | 62 s | 0.7 % | **136/136** | R4 |
-| `fire_emergency` | 0.44 s | 71.2 s | 262.5 s | 331 s | 31.9 % | **144/144** | R1, R2, R3, R7 |
-| `priority_passenger` | 0.29 s | 12.5 s | 35.9 s | 77 s | 0.7 % | **142/142** | — |
-| `stress_scale` | 2.17 s | 17.1 s | 66.0 s | 194 s | 7.0 % | **359/359** | — |
-| `demo_story` | 0.10 s | 72.4 s | 164.5 s | 174 s | 54.4 % | **68/68** | R1, R2, R3, R4, R7 |
+| Scenario | Avg wait | P95 | Max | Waits > 60 s | Delivered | Rules fired |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| `morning_up_peak` | 12.1 s | 39.6 s | 59 s | 0.0 % | **135/135** | — |
+| `evening_down_peak` | 22.4 s | 69.8 s | 109 s | 7.9 % | **164/164** | — |
+| `lunch_two_way` | 12.7 s | 42.8 s | 69 s | 1.6 % | **123/123** | — |
+| `interfloor_light` | 9.7 s | 24.0 s | 33 s | 0.0 % | **52/52** | — |
+| `car_breakdown` | 10.9 s | 33.2 s | 62 s | 0.7 % | **136/136** | R4 |
+| `fire_emergency` | 71.5 s | 265.8 s | 331 s | 32.3 % | **130/130** | R1, R2, R3, R7 |
+| `priority_passenger` | 14.1 s | 44.1 s | 77 s | 2.2 % | **138/138** | — |
+| `stress_scale` | 18.5 s | 63.2 s | 161 s | 5.8 % | **377/377** | — |
+| `demo_story` | 72.4 s | 164.5 s | 174 s | 54.4 % | **68/68** | R1, R2, R3, R4, R7 |
 
 Notes on the two apparent outliers, both expected:
 
@@ -174,12 +175,17 @@ Notes on the two apparent outliers, both expected:
   built for demonstration density, not for good service.
 
 **`stress_scale`** is the scalability result: 40 floors, 8 cars, a **full simulated hour**
-in **2.17 s** — roughly 1 600× real time, at 4.6 ms per tick — against a 120 s budget.
+in **under 4 s** (3.7 s measured on our laptop, about 1 000× real time) — against a 120 s budget.
 It differs from the default only by its YAML file.
 
 ---
 
 ## 3. Strategy benchmark
+
+*Original Phase 1 benchmark (5 seeds per cell). The current, larger comparison — 100 paired
+test seeds per traffic pattern, used in the slides and study material — is in
+[`docs/lift/closed_loop.md`](lift/closed_loop.md): up-peak average wait nearest car 56.2 s →
+full 29.9 s.*
 
 4 strategies × 4 scenarios × 5 seeds × 900 ticks = 80 runs. Identical seeds for every
 strategy, so differences are the coordination mechanism, not the traffic.
@@ -293,12 +299,12 @@ The Phase 2 LiftZero Control Room web client is verified across three layers: fa
 
 ```bash
 cd frontend
-pnpm test               # 66 Vitest unit and component tests
+pnpm test               # 72 Vitest unit and component tests
 pnpm test:coverage      # Statement coverage: 88.91 % (target > 80 %)
 pnpm e2e                # 16 Playwright browser specs across 6 views
 ```
 
-### 6.1 Unit and component tests — `frontend/src/` (66 tests)
+### 6.1 Unit and component tests — `frontend/src/` (72 tests)
 
 | Test Suite | Tests | What is checked |
 | --- | ---: | --- |

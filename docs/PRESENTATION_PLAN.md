@@ -1,35 +1,39 @@
-# Phase 8 — Viva presentation plan
+# Case-study review — presentation plan
 
-**Deck:** [`docs/LiftZero_Viva_Deck.pptx`](LiftZero_Viva_Deck.pptx) — 14 slides, white
-background, Cambria headings / Calibri body, navy + teal palette, no clip-art. Every chart is a
-real result rendered by `scripts/generate_viva_charts.py` (300 DPI, `reports/viva/`). Speaker
-notes in the deck name the presenter of each slide. Rebuild after new results:
+**Deck:** [`docs/LiftZero_Viva_Deck.pptx`](LiftZero_Viva_Deck.pptx) — 18 slides, white
+background, structured on the review rubric (each slide carries its rubric tag, e.g.
+"PEAS · 3M"). Speaker notes in every slide name the presenter and what to say.
+Charts are real results; screenshots are of the running dashboard.
+
+| # | Slide | Rubric item | Presenter |
+| --- | --- | --- | --- |
+| 1 | Title, team, register numbers | — | Adhikkesh |
+| 2 | Problem statement: elevator group control | Review 1 | Adhikkesh |
+| 3 | Why the obvious answer fails (measured) | Review 1 | Adhikkesh |
+| 4 | PEAS — the whole system | PEAS · 3M | Adhikkesh |
+| 5 | PEAS of every agent | PEAS · 3M | Adhikkesh |
+| 6 | Environment analysis (7 properties) | Env & Agent · 3M | Akash |
+| 7 | Why each agent is its type | Env & Agent · 3M | Akash |
+| 8 | Modelling car routing as state-space search (heuristic, admissibility) | Search · 3M | Akash |
+| 9 | BFS vs UCS vs Greedy vs A\* (200 problems) | Search · 3M | Akash |
+| 10 | Simulated annealing, minimax + alpha-beta, forward chaining | Search · 3M | Akash |
+| 11 | Tool and package selection, setup | Tools · 3M | Sisr Reddy |
+| 12 | Multi-agent execution: FIPA-ACL + Contract Net (+ Agents page) | MAS · 3M | Adhikkesh |
+| 13 | Live demo: Mission Control | Demo · 3M | Sisr Reddy |
+| 14 | Testing scenarios and automated tests | Testing · 3M | Kavin Karthic |
+| 15 | Results across traffic patterns | Testing · 3M | Akash |
+| 16 | Code structure and scalability | Code · 1M | Sisr Reddy |
+| 17 | Extension: LiftZero learned bidder | — | Kavin Karthic |
+| 18 | Conclusion, questions | Q&A · 1M | Kavin Karthic |
+
+**Timing:** about 1 minute per slide (≈ 18 min) + the 7-minute live demo
+([`DEMO_SCRIPT.md`](DEMO_SCRIPT.md)) + questions ([`STUDY_MATERIAL.md`](STUDY_MATERIAL.md) §12).
+
+**Rebuild after changes:**
 
 ```bash
-uv run python scripts/generate_viva_charts.py       # figures from reports/ and docs/lift/
+uv run python scripts/search_benchmark.py          # slide 9 numbers
+uv run python scripts/generate_viva_charts.py      # charts in reports/viva/
+uv run elevator serve --port 8765 &                # then: node scripts/capture_ui.mjs (screenshots)
 npm install pptxgenjs && node scripts/build_viva_deck.js
 ```
-
-| # | Slide | Presenter | Visual |
-| --- | --- | --- | --- |
-| 1 | Title, team and register numbers | Adhikkesh | team cards |
-| 2 | The Elevator Group Control Problem | Adhikkesh | stat callouts (N^k, 1 s cycle) |
-| 3 | Why classic dispatchers fail | Adhikkesh | native bar chart, up-peak waits |
-| 4 | Multi-agent architecture + Contract Net | Adhikkesh | agent cards + 4-step CNP flow |
-| 5 | Physical model, search and safety | Adhikkesh | three-column cards |
-| 6 | Feature engineering & learning environment | Kavin Karthic | token cards + data stats |
-| 7 | LiftZero-BC: set-Transformer, BC + DAgger | Kavin Karthic | `fig5_imitation_learning_curves.png` |
-| 8 | LiftZero-PPO: cooperative RL (CTDE) | Akash | loss, process steps, honest status |
-| 9 | PUCT-MCTS look-ahead (design) | Akash | formula, reflex vs deliberative |
-| 10 | Mission Control dashboard | Sisr Reddy | six feature cards (then live demo) |
-| 11 | Results: average wait | Akash | `fig1_wait_time_comparison.png` |
-| 12 | Learned vs teacher (ablation) | Akash | `fig4_learned_vs_teacher.png` |
-| 13 | Team contributions | all | four member cards |
-| 14 | Conclusion & next steps | Adhikkesh | stat callouts, Q&A |
-
-Additional figures for backup slides / questions: `fig2_p95_service_guarantee.png`,
-`fig3_energy_efficiency.png`, `fig6_dagger_rounds.png`, `fig7_offline_agreement.png`,
-`fig8_inference_latency.png`; after Kaggle PPO training, `fig9_ppo_learning_curves.png`.
-
-Timing: ~1.5 min per slide (≈ 20 min) + 6 min live demo (script in
-[`STUDY_MATERIAL.md`](STUDY_MATERIAL.md) §10).
