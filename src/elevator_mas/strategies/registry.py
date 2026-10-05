@@ -39,6 +39,11 @@ class DispatchStrategy:
     model_path: str | None = None
     #: The classical strategy a learned one imitates (its shadow teacher / DAgger labeller).
     teacher: str | None = None
+    #: How the dispatcher picks the winner among proposals: "min_bid" (Contract Net) or
+    #: "mcts" (PUCT look-ahead over contested calls, Phase 6).
+    arbiter: str = "min_bid"
+    #: Leaf evaluation of the look-ahead: "rollout" (base policy) or "value" (value head).
+    search_leaf: str = "rollout"
 
     @property
     def uses_reassignment(self) -> bool:
@@ -73,6 +78,7 @@ class DispatchStrategy:
             "adapts_weights": self.adapts_weights,
             "bidder": self.bidder,
             "teacher": self.teacher,
+            "arbiter": self.arbiter,
             "learning": self.uses_learned_bidder,
         }
 
@@ -229,5 +235,48 @@ register_strategy(
         bidder="learned",
         model_path="models/liftzero_ppo_v1.onnx",
         teacher="cnp_astar",
+    )
+)
+
+register_strategy(
+    DispatchStrategy(
+        name="liftzero_bc_mcts",
+        label="LiftZero + look-ahead (imitation + MCTS)",
+        description=(
+            "Cars bid with the LiftZero imitation network; for contested calls the dispatcher "
+            "runs a PUCT Monte-Carlo tree search over the next minute (sampled hidden "
+            "passengers, cost-greedy rollouts) and awards the call to the best look-ahead "
+            "choice. Everything else equals 'full'."
+        ),
+        assignment="cnp",
+        routing="astar",
+        reassignment="simulated_annealing",
+        parking_policy="hill_climb",
+        adapts_weights=True,
+        bidder="learned",
+        teacher="full",
+        arbiter="mcts",
+        search_leaf="rollout",
+    )
+)
+
+register_strategy(
+    DispatchStrategy(
+        name="liftzero_mcts",
+        label="LiftZero + look-ahead (RL + MCTS)",
+        description=(
+            "The PPO-trained LiftZero bidder with PUCT look-ahead arbitration whose leaves are "
+            "evaluated by the network's value head. Available once the PPO model is trained."
+        ),
+        assignment="cnp",
+        routing="astar",
+        reassignment="simulated_annealing",
+        parking_policy="hill_climb",
+        adapts_weights=True,
+        bidder="learned",
+        model_path="models/liftzero_ppo_v1.onnx",
+        teacher="full",
+        arbiter="mcts",
+        search_leaf="value",
     )
 )

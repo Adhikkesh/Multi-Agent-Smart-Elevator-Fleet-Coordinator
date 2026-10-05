@@ -260,11 +260,23 @@ class DispatcherAgent(CommunicatingAgent):
             if self.model.award_hook is not None:
                 chosen = self.model.award_hook(call, record, round_view, viable)
                 ranked.sort(key=lambda b: b.car_id != chosen)  # stable: chosen first
+            search_result = None
+            search_suffix = ""
+            if self.model.arbiter is not None and len(viable) > 1 and award_bids is bids:
+                chosen, search_result = self.model.arbiter.choose(
+                    self._public_view(round_view, call, record), call, viable
+                )
+                ranked.sort(key=lambda b: b.car_id != chosen)
+                if search_result is not None:
+                    search_suffix = search_trace(search_result)
             winner = ranked[0]
             round_record.winner = winner.car_id
             round_record.reason = explain_award(call, winner, ranked, award_bids)
             if self.model.strategy.uses_learned_bidder:
                 round_record.reason += liftzero_trace(bids, shadow_bids, award_bids is not bids)
+                round_record.reason += search_suffix
+            if self.model.brain is not None:
+                self._log_brain(conversation_id, call, bids, shadow_bids, ranked, search_result)
             self.assignments[call] = winner.car_id
             for bid in viable:
                 performative = (
@@ -312,6 +324,77 @@ class DispatcherAgent(CommunicatingAgent):
             )
             for hook in self.model.decision_hooks:
                 hook(event)
+
+    def _public_view(self, round_view: Any, call: HallCall, record: dict[str, Any]) -> Any:
+        """What the dispatcher may use for look-ahead: the board, its own call records and
+        the waiting counts the floors report — never a car's or passenger's private state."""
+        from elevator_mas.learning.lift.search.worldmodel import PublicView
+
+        statuses, policy = round_view
+        cfg = self.model.config
+        calls: dict[tuple[int, int], tuple[int, int]] = {}
+        known: dict[HallCall, int] = {call: int(record.get("since", self.model.tick))}
+        for c in self.assignments:
+            known.setdefault(c, self.model.tick)
+        for c, rec in [*self.pending_calls.items(), *self.unassigned.items()]:
+            known.setdefault(c, int(rec.get("since", self.model.tick)))
+        for c, since in known.items():
+            waiting = self.model.waiting_count(c.floor, c.direction)
+            if waiting > 0 or c == call:
+                calls[(c.floor, c.direction.sign)] = (max(waiting, 1), since)
+        demand = sum(float(v) for v in policy.demand.values()) if policy.demand else 0.0
+        return PublicView(
+            statuses=tuple(statuses),
+            pattern=str(policy.pattern),
+            demand_rate=demand if demand > 0 else float(cfg.traffic.rate_at(self.model.tick)),
+            floors=cfg.building.floors,
+            lobby=cfg.building.lobby,
+            capacity=cfg.building.capacity,
+            seconds_per_floor=cfg.timing.seconds_per_floor,
+            door_open=cfg.timing.door_open,
+            door_close=cfg.timing.door_close,
+            boarding_per_passenger=cfg.timing.boarding_per_passenger,
+            tick=self.model.tick,
+            calls=calls,
+        )
+
+    def _log_brain(
+        self,
+        conversation_id: Any,
+        call: HallCall,
+        bids: list[Bid],
+        shadow_bids: tuple[Bid, ...] | None,
+        ranked: list[Bid],
+        search_result: Any,
+    ) -> None:
+        """Record one learned auction in the Brain log (strict JSON for the UI)."""
+        import math
+
+        from elevator_mas.learning.lift.search.brain import candidate_rows
+
+        viable = sorted((b for b in bids if not b.refused), key=lambda b: (b.total, b.car_id))
+        net_scores = {b.car_id: math.log1p(max(b.total, 0.0)) for b in viable}
+        attn: dict[int, float] = {}
+        encoded = None
+        hit = self.model.learned_bidder.cached(conversation_id)
+        if hit is not None:
+            attn = {cid: float(hit.out.attn[0, i]) for i, cid in enumerate(hit.car_ids)}
+            encoded = hit.encoded
+        shadow = {b.car_id: b.total for b in shadow_bids or () if not b.refused}
+        teacher = min(shadow, key=lambda k: (shadow[k], k)) if shadow else None
+        self.model.brain.record(
+            {
+                "tick": self.model.tick,
+                "conversation_id": conversation_id,
+                "call": {"floor": call.floor, "direction": call.direction.name},
+                "candidates": candidate_rows(bids, net_scores, attn, shadow),
+                "chosen": ranked[0].car_id,
+                "net_choice": viable[0].car_id if viable else None,
+                "teacher_choice": teacher,
+                "search": search_result.as_dict() if search_result is not None else None,
+            },
+            encoded,
+        )
 
     def _dagger_mix(self, bids: list[Bid], shadow_bids: tuple[Bid, ...] | None) -> list[Bid]:
         """The bids the award is decided on: usually the cars' own, but under DAgger mixing
@@ -667,6 +750,20 @@ def liftzero_trace(
                 text += f"; teacher would pick car {teacher[0].car_id}"
     if teacher_awarded:
         text += " (awarded by teacher: DAgger mixing)"
+    return text
+
+
+def search_trace(result: Any) -> str:
+    """Decision-trace suffix for a searched auction."""
+    best = result.candidates.index(result.chosen)
+    text = f" [look-ahead] {result.sims_done} sims in {result.time_ms:.0f} ms: " + ", ".join(
+        f"car {c} N={n} Q={q:+.2f}"
+        for c, n, q in zip(result.candidates, result.visits, result.q, strict=True)
+    )
+    if result.overridden:
+        text += f" -> OVERRIDE net choice car {result.net_choice} with car {result.chosen}"
+    else:
+        text += f" -> confirms car {result.candidates[best]}"
     return text
 
 

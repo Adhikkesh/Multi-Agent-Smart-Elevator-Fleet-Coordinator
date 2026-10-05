@@ -96,6 +96,7 @@ def strategy_availability(strategy: Any) -> tuple[bool, str]:
 class _Priced:
     out: NetOutNp
     car_ids: list[int]
+    encoded: dict[str, np.ndarray] | None = None
 
 
 class LearnedBidder:
@@ -125,7 +126,9 @@ class LearnedBidder:
             tick=self.model.tick,
         )
         self.forward_passes += 1
-        return _Priced(self.runtime.score(encode_decision(ctx)), [s.car_id for s in statuses])
+        enc = encode_decision(ctx)
+        arrays = {k: getattr(enc, k) for k in ("call", "cars", "glob", "mask", "eligible")}
+        return _Priced(self.runtime.score(enc), [s.car_id for s in statuses], arrays)
 
     def priced(self, conversation_id: Any, call: HallCall, urgency: int, waiting: int) -> _Priced:
         """The network's view of one CFP (cached per conversation in shared mode)."""
@@ -171,6 +174,10 @@ class LearnedBidder:
         if status.plan_end_floor is None or status.planned_stops == 0:
             return abs(status.floor - call.floor) * spf
         return float(status.plan_end_eta) + abs(status.plan_end_floor - call.floor) * spf
+
+    def cached(self, conversation_id: Any) -> _Priced | None:
+        """The network's view of a CFP, if it was priced in shared mode."""
+        return self._cache.get(conversation_id)
 
     def score_of(self, conversation_id: Any, car_id: int) -> float | None:
         """The raw network score of a car for a cached CFP (for decision traces)."""

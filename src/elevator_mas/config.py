@@ -145,6 +145,12 @@ class LiftConfig(BaseModel):
     #: the network and the award is made by `ElevatorModel.award_hook` (the policy being
     #: trained). Eligibility still comes from the classical refusal rule.
     rollout: bool = False
+    #: Look-ahead arbitration (strategies with arbiter="mcts").
+    search_sims: int = Field(default=32, ge=0, le=512)
+    search_budget_ms: float = Field(default=50.0, ge=1.0, le=2000.0)
+    search_tau_margin: float = Field(default=0.5, ge=0.0, le=100.0)
+    search_top_k: int = Field(default=3, ge=2, le=8)
+    search_horizon: int = Field(default=60, ge=10, le=600)
 
 
 class ScenarioConfig(BaseModel):

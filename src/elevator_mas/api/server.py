@@ -24,6 +24,8 @@ from elevator_mas.agents import (
 )
 from elevator_mas.api.schemas import (
     BenchmarkRequest,
+    BrainConfigRequest,
+    ExplainRequest,
     InjectRequest,
     PassengerRequest,
     ResetRequest,
@@ -41,6 +43,7 @@ from elevator_mas.rules import SAFETY_RULES
 from elevator_mas.strategies import STRATEGIES
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+ROOT_DIR = Path(__file__).resolve().parents[3]
 
 #: The agent classes whose PEAS the Theory tab documents, in presentation order.
 AGENT_CLASSES = (
@@ -505,6 +508,114 @@ def create_app(scenario: str = "demo_story") -> FastAPI:
             }
 
         return await asyncio.to_thread(_execute)
+
+    # ------------------------------------------------------------ brain (Phase 6)
+
+    def _brain_active() -> dict[str, Any]:
+        model = session.model
+        strategy = model.strategy
+        card = None
+        if model.learned_bidder is not None:
+            c = model.learned_bidder.runtime.card
+            card = {
+                "name": c.name,
+                "version": c.version,
+                "param_count": c.param_count,
+                "feature_version": c.feature_version,
+                "metrics": {"val": c.metrics.get("val", {})},
+            }
+        arbiter = model.arbiter
+        return {
+            "strategy": strategy.name,
+            "label": strategy.label,
+            "bidder": strategy.bidder,
+            "arbiter": strategy.arbiter,
+            "model": card,
+            "search": arbiter.cfg.as_dict() if arbiter is not None else None,
+            "shadow_teacher": model.config.lift.shadow_teacher,
+        }
+
+    @app.get("/api/brain")
+    async def get_brain() -> dict[str, Any]:
+        """The learned system at a glance: what is running, how it is deciding."""
+        model = session.model
+        learned = [strategy_meta(s) for s in STRATEGIES.values() if s.uses_learned_bidder]
+        return {
+            "available": model.brain is not None,
+            "strategies": learned,
+            "active": _brain_active(),
+            "stats": model.brain.summary() if model.brain is not None else None,
+            "arbiter": (
+                {
+                    "searched": model.arbiter.searched,
+                    "skipped": model.arbiter.skipped,
+                    "overrides": model.arbiter.overrides,
+                    "fallbacks": model.arbiter.fallbacks,
+                }
+                if model.arbiter is not None
+                else None
+            ),
+        }
+
+    @app.get("/api/brain/decisions")
+    async def get_brain_decisions(limit: int = 50) -> dict[str, Any]:
+        """The most recent learned decisions, newest first."""
+        brain = session.model.brain
+        limit = max(1, min(limit, 200))
+        return {"decisions": brain.recent(limit) if brain is not None else []}
+
+    @app.post("/api/brain/config")
+    async def set_brain_config(request: BrainConfigRequest) -> dict[str, Any]:
+        """Change the look-ahead budget or the shadow teacher on the running model."""
+        from dataclasses import replace
+
+        model = session.model
+        if model.brain is None:
+            raise HTTPException(status_code=400, detail="the active strategy is not learned")
+        if request.shadow_teacher is not None:
+            model.config.lift.shadow_teacher = request.shadow_teacher
+        if model.arbiter is not None:
+            updates = {
+                "sims": request.sims,
+                "time_budget_ms": request.time_budget_ms,
+                "tau_margin": request.tau_margin,
+                "top_k": request.top_k,
+            }
+            model.arbiter.cfg = replace(
+                model.arbiter.cfg, **{k: v for k, v in updates.items() if v is not None}
+            )
+        return _brain_active()
+
+    @app.post("/api/brain/explain")
+    async def explain_decision(request: ExplainRequest) -> dict[str, Any]:
+        """Occlusion saliency for one recent decision ("Why?")."""
+        from elevator_mas.learning.lift.search.brain import explain
+
+        model = session.model
+        brain = model.brain
+        if brain is None:
+            raise HTTPException(status_code=400, detail="the active strategy is not learned")
+        key = request.conversation_id
+        enc = brain.encoded.get(key)
+        if enc is None and isinstance(key, str) and key.isdigit():
+            enc = brain.encoded.get(int(key))
+        entry = next((d for d in brain.decisions if d["conversation_id"] == key), None)
+        if enc is None or entry is None:
+            raise HTTPException(status_code=404, detail="decision not in the recent window")
+        groups = explain(model.learned_bidder.runtime, enc, int(entry["net_choice"]))
+        return {"conversation_id": key, "method": "occlusion", "groups": groups}
+
+    @app.get("/api/brain/model-card")
+    async def get_model_card(name: str = "liftzero_bc_v1") -> dict[str, Any]:
+        """A shipped model's card."""
+        from elevator_mas.learning.lift.card import ModelCardError, load_card
+
+        if not name.replace("_", "").isalnum():
+            raise HTTPException(status_code=400, detail="invalid model name")
+        try:
+            return load_card(ROOT_DIR / "models" / f"{name}.onnx").as_dict()
+        except ModelCardError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
 
     @app.get("/api/board")
     async def get_board() -> dict[str, Any]:

@@ -94,6 +94,30 @@ class ElevatorModel(Model):
                 inference=config.lift.inference,
             )
             self.dagger_rng = self.rng.spawn(1)[0]
+        #: Phase 6: the Brain log (learned strategies) and the look-ahead arbiter (mcts).
+        self.brain: Any = None
+        self.arbiter: Any = None
+        if self.learned_bidder is not None:
+            from elevator_mas.learning.lift.search.brain import BrainLog
+
+            self.brain = BrainLog()
+            if self.strategy.arbiter == "mcts":
+                from elevator_mas.learning.lift.search.arbiter import MCTSArbiter
+                from elevator_mas.learning.lift.search.mcts import SearchConfig
+
+                lift = config.lift
+                self.arbiter = MCTSArbiter(
+                    SearchConfig(
+                        sims=lift.search_sims,
+                        time_budget_ms=lift.search_budget_ms,
+                        tau_margin=lift.search_tau_margin,
+                        top_k=lift.search_top_k,
+                        horizon=lift.search_horizon,
+                        leaf=self.strategy.search_leaf,
+                    ),
+                    self.learned_bidder.runtime,
+                    self.seed_value,
+                )
         #: Observer hooks for learning environments and decision recorders.
         self.decision_hooks: list[Callable[[DecisionEvent], None]] = []
         self.negotiation_rounds: int = 0

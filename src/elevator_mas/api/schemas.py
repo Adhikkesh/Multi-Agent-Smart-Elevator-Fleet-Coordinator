@@ -61,3 +61,19 @@ class RunRequest(BaseModel):
     seed: int
     ticks: int = Field(default=600, ge=60, le=3600)
     sample_every: int = Field(default=10, ge=1, le=60)
+
+
+class BrainConfigRequest(BaseModel):
+    """Live look-ahead settings (Brain panel)."""
+
+    sims: int | None = Field(default=None, ge=0, le=512)
+    time_budget_ms: float | None = Field(default=None, ge=1.0, le=2000.0)
+    tau_margin: float | None = Field(default=None, ge=0.0, le=100.0)
+    top_k: int | None = Field(default=None, ge=2, le=8)
+    shadow_teacher: bool | None = None
+
+
+class ExplainRequest(BaseModel):
+    """Which decision to explain."""
+
+    conversation_id: int | str
