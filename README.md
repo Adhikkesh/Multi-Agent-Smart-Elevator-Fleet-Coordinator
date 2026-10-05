@@ -44,7 +44,11 @@ uv run elevator run --scenario morning_up_peak --strategy liftzero_bc   # learne
 uv run elevator lift card                                              # model card
 uv run elevator lift bench-infer                                       # ~0.3 ms / decision
 uv run elevator lift eval-sim --strategy liftzero_bc --strategy full --n 20
+uv run elevator run --scenario lunch_two_way --strategy liftzero_bc_mcts   # + look-ahead
 ```
+
+Open **http://localhost:8000/brain** (after `uv run elevator serve`) to watch the network's bids,
+attention and look-ahead search decide live, with a "Why?" explanation per decision.
 
 Training needs the optional groups: `uv sync --group learn --group lift-train`, then
 `uv run elevator lift train-bc --preset smoke` (or `scripts/reproduce_phase4.sh` for the

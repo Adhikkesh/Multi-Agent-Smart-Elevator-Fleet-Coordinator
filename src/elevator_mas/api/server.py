@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from elevator_mas import __version__
 from elevator_mas.agents import (
     DispatcherAgent,
     ElevatorAgent,
@@ -172,7 +173,7 @@ def create_app(scenario: str = "demo_story") -> FastAPI:
     app = FastAPI(
         title="Smart Elevator Fleet Coordinator",
         description="Multi-agent elevator simulation — Fundamentals of AI case study.",
-        version="1.0.0",
+        version=__version__,
         lifespan=lifespan,
     )
     app.state.session = session
