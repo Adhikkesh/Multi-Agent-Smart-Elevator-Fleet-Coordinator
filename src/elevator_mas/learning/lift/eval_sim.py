@@ -173,8 +173,16 @@ def run_matrix(
     if workers <= 1:
         rows = [_run_star(j) for j in jobs]
     else:
+        rows = []
+        step = max(1, len(jobs) // 10)
         with mp.get_context("spawn").Pool(workers) as pool:
-            rows = pool.map(_run_star, jobs, chunksize=max(1, len(jobs) // (workers * 8)))
+            # One job at a time: a slow run never holds a queue of others hostage.
+            for i, row in enumerate(pool.imap_unordered(_run_star, jobs, chunksize=1), 1):
+                rows.append(row)
+                if i % step == 0:
+                    log(f"[eval-sim] {i}/{len(jobs)} runs")
+        order = {(j[0], j[1], j[2]): k for k, j in enumerate(jobs)}
+        rows.sort(key=lambda r: order[(r["strategy"], r["regime"], r["seed"])])
     log(f"[eval-sim] done in {time.perf_counter() - t0:.0f}s")
     return pd.DataFrame(rows)
 

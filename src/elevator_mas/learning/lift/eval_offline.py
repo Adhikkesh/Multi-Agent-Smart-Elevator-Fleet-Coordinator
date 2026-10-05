@@ -213,7 +213,10 @@ def evaluate_split(model: Any, d: Decisions, split: str) -> SplitReport:
         calibration=calibration(score, d),
         failure_modes=failure_modes(d, choice),
         mistakes=render_mistakes(d, choice, score),
-        conflicts=label_conflicts(d),
+        conflicts={
+            **label_conflicts(d),
+            **{f"coarse_{k}": v for k, v in label_conflicts(d, decimals=1).items()},
+        },
         regret=reg[~np.isnan(reg)],
     )
 
@@ -285,6 +288,12 @@ def write_report(
             f"vector with another decision; labels conflict within those groups for "
             f"{c.get('conflict_pct', 0.0):.3f} % of all non-trivial decisions — error no "
             "model of these features can remove.",
+            "",
+            f"Coarser (1-decimal) near-duplicates: {c.get('coarse_decisions_in_groups', 0):,} "
+            f"decisions ({c.get('coarse_duplicate_pct', 0.0):.1f} %) fall in shared cells; "
+            f"labels conflict for {c.get('coarse_conflict_pct', 0.0):.2f} % of all non-trivial "
+            "decisions. This is only indicative (a cell mixes genuinely different states), but "
+            "it shows how much of the residual error is ambiguity in the public features.",
             "",
             "### Top failure modes (positive-regret decisions)",
             "",
