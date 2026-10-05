@@ -1,13 +1,13 @@
 # Testing and results
 
 ```bash
-uv run pytest                 # 432 tests (incl. slow), ~2.5 min; -m 'not slow' for a quick run
+uv run pytest                 # 444 tests (incl. slow), ~2.5 min; -m 'not slow' for a quick run
 uv run pytest --cov           # coverage of the core logic
 uv run elevator verify        # run every scenario, assert the invariants
 uv run elevator bench         # regenerate reports/
 ```
 
-**432 Python tests pass** (Phase 1–2: 253 → Phase 4: 432) **and 66 Vitest tests.** Coverage of the core package is 96 %; of `learning.lift` 90 % (targets 85 %).
+**444 Python tests pass** (Phase 1–2: 253 → Phase 4: 432 → Phase 5: 444) **and 66 Vitest tests.** Coverage of the core package is 96 %; of `learning.lift` 90 % (targets 85 %).
 
 Fire-recall regression: `tests/test_fire_recall_regression.py` (6) pins a Phase 1 safety bug found by the Phase 4 test matrix (see `docs/lift/PHASE4_IMITATION.md` §9).
 

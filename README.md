@@ -65,6 +65,9 @@ See [`docs/UI.md`](docs/UI.md) and [`frontend/README.md`](frontend/README.md) fo
 
 ## Documentation
 
+- **Viva:** [`docs/LiftZero_Viva_Deck.pptx`](docs/LiftZero_Viva_Deck.pptx) (14 slides), [`docs/PRESENTATION_PLAN.md`](docs/PRESENTATION_PLAN.md), [`docs/STUDY_MATERIAL.md`](docs/STUDY_MATERIAL.md), charts in `reports/viva/`.
+- [`docs/lift/PHASE5_PPO.md`](docs/lift/PHASE5_PPO.md) — cooperative PPO design; train it with [`docs/lift/KAGGLE_TRAINING.md`](docs/lift/KAGGLE_TRAINING.md). Status of Phases 6–7: [`docs/lift/PHASE6_7_STATUS.md`](docs/lift/PHASE6_7_STATUS.md).
+
 - [`docs/lift/PHASE4_IMITATION.md`](docs/lift/PHASE4_IMITATION.md) — the learned bidder: network, losses, DAgger, results; [`docs/lift/MODEL_CARD.md`](docs/lift/MODEL_CARD.md).
 - [`docs/LEARNING_ENV.md`](docs/LEARNING_ENV.md) — Phase 3 feature schema, expert recorder, twin and Gym environments.
 - [`docs/UI.md`](docs/UI.md) — LiftZero Control Room React UI architecture, features, bundle metrics, and test coverage.
