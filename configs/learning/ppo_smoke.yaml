@@ -1,0 +1,11 @@
+# LiftZero PPO — smoke preset (~5 min): proves the pipeline end to end.
+name: ppo_smoke
+init: models/liftzero_bc_v1.ckpt.pt
+total_decisions: 4096
+decisions_per_iter: 2048
+workers: 2
+epochs: 2
+minibatch: 512
+eval_every: 1
+eval_seeds: 2
+seed: 0

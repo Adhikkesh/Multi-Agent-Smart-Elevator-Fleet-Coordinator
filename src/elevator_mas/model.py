@@ -82,7 +82,10 @@ class ElevatorModel(Model):
         #: Independent seeded stream for DAgger award mixing, spawned from `self.rng` so
         #: drawing from it never shifts the passenger-arrival stream.
         self.dagger_rng: Any = None
-        if self.strategy.uses_learned_bidder:
+        #: RL training only: `hook(call, record, round_view, viable_bids) -> car_id` decides
+        #: the award among the cars that proposed (see `LiftConfig.rollout`).
+        self.award_hook: Callable[..., int] | None = None
+        if self.strategy.uses_learned_bidder and not config.lift.rollout:
             from elevator_mas.learning.lift.bidder import LearnedBidder
 
             self.learned_bidder = LearnedBidder(

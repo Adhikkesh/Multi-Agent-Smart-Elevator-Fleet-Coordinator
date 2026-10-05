@@ -483,7 +483,9 @@ class ElevatorAgent(CommunicatingAgent):
         call = cfp.content["call"]
         urgency = int(cfp.content.get("urgency", 0))
         shadow: Bid | None = None
-        if self.model.learned_bidder is not None:
+        if self.model.config.lift.rollout:
+            bid = self._refusal() or Bid(car_id=self.car_id, total=0.0, eta=0.0)
+        elif self.model.learned_bidder is not None:
             waiting = int(cfp.content.get("waiting", 0))
             bid, shadow = self.learned_bid(call, urgency, waiting, cfp.conversation_id)
         else:

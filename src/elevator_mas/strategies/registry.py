@@ -195,3 +195,39 @@ register_strategy(
         teacher="cnp_astar",
     )
 )
+
+register_strategy(
+    DispatchStrategy(
+        name="liftzero_ppo",
+        label="LiftZero (reinforcement learning)",
+        description=(
+            "The LiftZero bidder fine-tuned with cooperative PPO on the real simulator "
+            "(team reward on passenger waiting, riding, energy and long waits), anchored to "
+            "the imitation policy by a KL penalty. Everything else equals 'full'."
+        ),
+        assignment="cnp",
+        routing="astar",
+        reassignment="simulated_annealing",
+        parking_policy="hill_climb",
+        adapts_weights=True,
+        bidder="learned",
+        model_path="models/liftzero_ppo_v1.onnx",
+        teacher="full",
+    )
+)
+
+register_strategy(
+    DispatchStrategy(
+        name="liftzero_ppo_cnp",
+        label="LiftZero (RL, bare CNP)",
+        description=(
+            "The PPO-trained LiftZero bidder inside plain Contract Net + A* routing: equals "
+            "'cnp_astar' except the bidder."
+        ),
+        assignment="cnp",
+        routing="astar",
+        bidder="learned",
+        model_path="models/liftzero_ppo_v1.onnx",
+        teacher="cnp_astar",
+    )
+)

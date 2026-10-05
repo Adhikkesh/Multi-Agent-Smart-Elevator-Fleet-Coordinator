@@ -141,6 +141,10 @@ class LiftConfig(BaseModel):
     beta: float = Field(default=0.0, ge=0.0, le=1.0)
     #: Override of the strategy's ONNX model path.
     model_path: str | None = None
+    #: RL rollout mode (Phase 5): eligible cars propose a placeholder bid without running
+    #: the network and the award is made by `ElevatorModel.award_hook` (the policy being
+    #: trained). Eligibility still comes from the classical refusal rule.
+    rollout: bool = False
 
 
 class ScenarioConfig(BaseModel):

@@ -257,6 +257,9 @@ class DispatcherAgent(CommunicatingAgent):
         if viable:
             # Tie-break on car id so the award is reproducible from the seed.
             ranked = sorted(viable, key=lambda b: (b.total, b.car_id))
+            if self.model.award_hook is not None:
+                chosen = self.model.award_hook(call, record, round_view, viable)
+                ranked.sort(key=lambda b: b.car_id != chosen)  # stable: chosen first
             winner = ranked[0]
             round_record.winner = winner.car_id
             round_record.reason = explain_award(call, winner, ranked, award_bids)

@@ -243,3 +243,29 @@ def card(
         markdown.parent.mkdir(parents=True, exist_ok=True)
         markdown.write_text(render_markdown(c), encoding="utf-8")
         typer.echo(f"wrote {markdown}")
+
+
+@lift_app.command("train-ppo")
+def train_ppo(
+    config: Annotated[Path | None, typer.Option(help="PPO YAML (overrides --preset).")] = None,
+    preset: Annotated[str, typer.Option(help="smoke | default | long")] = "default",
+    seed: Annotated[int | None, typer.Option(help="Override the config seed.")] = None,
+    workers: Annotated[int | None, typer.Option(help="Rollout worker processes.")] = None,
+    decisions: Annotated[int | None, typer.Option(help="Override total decisions.")] = None,
+    resume: Annotated[Path | None, typer.Option(help="Resume from a last.pt.")] = None,
+    out: Annotated[Path, typer.Option(help="Directory for run folders.")] = Path("runs"),
+) -> None:
+    """Cooperative PPO (CTDE critic, KL anchor to BC) on the real simulator.
+
+    Example: elevator lift train-ppo --preset default --seed 0 --workers 3
+    """
+    from dataclasses import replace
+
+    from elevator_mas.learning.lift.rl.ppo import PPOTrainer, load_ppo_config
+
+    cfg = load_ppo_config(config, preset)
+    over = {"seed": seed, "workers": workers, "total_decisions": decisions}
+    cfg = replace(cfg, **{k: v for k, v in over.items() if v is not None})
+    with PPOTrainer(cfg, out, log=_echo, resume=resume) as trainer:
+        info = trainer.train()
+    typer.echo(f"best checkpoint: {trainer.run_dir / 'best.pt'} (score {info['best_score_pct']})")

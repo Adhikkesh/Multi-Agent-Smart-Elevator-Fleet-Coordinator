@@ -62,6 +62,9 @@ class NetOut:
     attn: Tensor
     #: scalar learnable log-temperature of the stochastic policy.
     logit_temp: Tensor
+    #: [B, 3d] pooled decision representation (glob ; call ; mean of cars) — the input of the
+    #: public value head, also read by the Phase 5 privileged critic. Not exported to ONNX.
+    pooled: Tensor | None = None
 
 
 def _token_mlp(k_in: int, d: int) -> nn.Sequential:
@@ -182,7 +185,8 @@ class LiftZeroNet(nn.Module):
 
         denom = maskf.sum(dim=1, keepdim=True).clamp(min=1.0)
         car_mean = (car_tok * maskf[:, :, None]).sum(dim=1) / denom
-        value = self.value_head(torch.cat([x[:, 0, :], x[:, 1, :], car_mean], dim=-1))
+        pooled = torch.cat([x[:, 0, :], x[:, 1, :], car_mean], dim=-1)
+        value = self.value_head(pooled)
 
         call_attn = weights[:, 1, 2:] * maskf
         call_attn = call_attn / call_attn.sum(dim=1, keepdim=True).clamp(min=1e-9)
@@ -193,6 +197,7 @@ class LiftZeroNet(nn.Module):
             value=value.squeeze(-1),
             attn=call_attn,
             logit_temp=self.logit_temp,
+            pooled=pooled,
         )
 
 
